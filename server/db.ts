@@ -1,11 +1,27 @@
-import { eq } from "drizzle-orm";
+import { eq, and, desc, gte, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
-import { ENV } from './_core/env';
+import {
+  InsertUser,
+  users,
+  wallets,
+  InsertWallet,
+  transactions,
+  InsertTransaction,
+  escrows,
+  InsertEscrow,
+  digitalProducts,
+  InsertDigitalProduct,
+  reviews,
+  InsertReview,
+  withdrawalRequests,
+  InsertWithdrawalRequest,
+  trustedSellerSubscriptions,
+  InsertTrustedSellerSubscription,
+} from "../drizzle/schema";
+import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
-// Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
@@ -17,6 +33,8 @@ export async function getDb() {
   }
   return _db;
 }
+
+// ============ USER OPERATIONS ============
 
 export async function upsertUser(user: InsertUser): Promise<void> {
   if (!user.openId) {
@@ -35,7 +53,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     };
     const updateSet: Record<string, unknown> = {};
 
-    const textFields = ["name", "email", "loginMethod"] as const;
+    const textFields = ["name", "email", "loginMethod", "phone", "bio", "city", "profileImage"] as const;
     type TextField = (typeof textFields)[number];
 
     const assignNullable = (field: TextField) => {
@@ -56,8 +74,8 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       values.role = user.role;
       updateSet.role = user.role;
     } else if (user.openId === ENV.ownerOpenId) {
-      values.role = 'admin';
-      updateSet.role = 'admin';
+      values.role = "admin";
+      updateSet.role = "admin";
     }
 
     if (!values.lastSignedIn) {
@@ -89,4 +107,243 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+export async function getUserById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+// ============ WALLET OPERATIONS ============
+
+export async function getOrCreateWallet(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  let wallet = await db.select().from(wallets).where(eq(wallets.userId, userId)).limit(1);
+
+  if (wallet.length === 0) {
+    await db.insert(wallets).values({
+      userId,
+      balance: "0",
+      pendingBalance: "0",
+      totalEarned: "0",
+      totalWithdrawn: "0",
+    });
+    wallet = await db.select().from(wallets).where(eq(wallets.userId, userId)).limit(1);
+  }
+
+  return wallet[0];
+}
+
+export async function getWalletByUserId(userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db.select().from(wallets).where(eq(wallets.userId, userId)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+// ============ TRANSACTION OPERATIONS ============
+
+export async function createTransaction(transaction: InsertTransaction) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(transactions).values(transaction);
+  return result;
+}
+
+export async function getUserTransactions(userId: number, limit: number = 50, offset: number = 0) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(transactions)
+    .where(eq(transactions.userId, userId))
+    .orderBy(desc(transactions.createdAt))
+    .limit(limit)
+    .offset(offset);
+}
+
+// ============ ESCROW OPERATIONS ============
+
+export async function createEscrow(escrow: InsertEscrow) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(escrows).values(escrow);
+  return result;
+}
+
+export async function getEscrowById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db.select().from(escrows).where(eq(escrows.id, id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getUserEscrows(userId: number, limit: number = 50, offset: number = 0) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(escrows)
+    .where(
+      or(
+        eq(escrows.buyerId, userId),
+        eq(escrows.sellerId, userId)
+      )
+    )
+    .orderBy(desc(escrows.createdAt))
+    .limit(limit)
+    .offset(offset);
+}
+
+export async function updateEscrowStatus(id: number, status: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(escrows).set({ status: status as any }).where(eq(escrows.id, id));
+}
+
+// ============ DIGITAL PRODUCT OPERATIONS ============
+
+export async function createDigitalProduct(product: InsertDigitalProduct) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(digitalProducts).values(product);
+  return result;
+}
+
+export async function getDigitalProductById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db.select().from(digitalProducts).where(eq(digitalProducts.id, id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getSellerProducts(sellerId: number, limit: number = 50, offset: number = 0) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(digitalProducts)
+    .where(and(eq(digitalProducts.sellerId, sellerId), eq(digitalProducts.isActive, true)))
+    .orderBy(desc(digitalProducts.createdAt))
+    .limit(limit)
+    .offset(offset);
+}
+
+export async function searchProducts(
+  query: string,
+  category?: string,
+  limit: number = 50,
+  offset: number = 0
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  let conditions = [eq(digitalProducts.isActive, true)];
+
+  if (category) {
+    conditions.push(eq(digitalProducts.category, category));
+  }
+
+  return await db
+    .select()
+    .from(digitalProducts)
+    .where(and(...conditions))
+    .orderBy(desc(digitalProducts.createdAt))
+    .limit(limit)
+    .offset(offset);
+}
+
+// ============ REVIEW OPERATIONS ============
+
+export async function createReview(review: InsertReview) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return await db.insert(reviews).values(review);
+}
+
+export async function getUserReviews(userId: number, limit: number = 50, offset: number = 0) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(reviews)
+    .where(eq(reviews.revieweeId, userId))
+    .orderBy(desc(reviews.createdAt))
+    .limit(limit)
+    .offset(offset);
+}
+
+// ============ WITHDRAWAL OPERATIONS ============
+
+export async function createWithdrawalRequest(request: InsertWithdrawalRequest) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return await db.insert(withdrawalRequests).values(request);
+}
+
+export async function getUserWithdrawals(userId: number, limit: number = 50, offset: number = 0) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(withdrawalRequests)
+    .where(eq(withdrawalRequests.userId, userId))
+    .orderBy(desc(withdrawalRequests.createdAt))
+    .limit(limit)
+    .offset(offset);
+}
+
+export async function getPendingWithdrawals(limit: number = 50, offset: number = 0) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(withdrawalRequests)
+    .where(eq(withdrawalRequests.status, "pending"))
+    .orderBy(desc(withdrawalRequests.createdAt))
+    .limit(limit)
+    .offset(offset);
+}
+
+// ============ TRUSTED SELLER OPERATIONS ============
+
+export async function createTrustedSellerSubscription(subscription: InsertTrustedSellerSubscription) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return await db.insert(trustedSellerSubscriptions).values(subscription);
+}
+
+export async function getUserActiveTrustedSubscription(userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db
+    .select()
+    .from(trustedSellerSubscriptions)
+    .where(and(eq(trustedSellerSubscriptions.userId, userId), eq(trustedSellerSubscriptions.isActive, true)))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : undefined;
+}
+
+// Helper function to import or
+import { or } from "drizzle-orm";
