@@ -311,3 +311,19 @@
     @apply text-sm text-muted-foreground;
   }
 }
+
+315	/* Privacy Mode Styles */
+316	.privacy-mode .balance-amount {
+317	  filter: blur(8px);
+318	  transition: filter 0.3s ease;
+319	}
+320	
+321	.privacy-mode .balance-amount:hover {
+322	  filter: blur(0);
+323	}
+324	
+325	/* Arabic Font Support */
+326	.font-arabic {
+327	  font-family: 'Cairo', sans-serif;
+328	}
+329	
