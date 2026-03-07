@@ -3,7 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router, protectedProcedure } from "./_core/trpc";
 import { z } from "zod";
-import { or } from "drizzle-orm";
+
 import {
   getOrCreateWallet,
   getUserById,
@@ -25,12 +25,11 @@ import {
   createTransaction,
   getUserTransactions,
   getWalletByUserId,
-  getAdminStats,
-  getAllDisputes,
-  resolveDispute,
-  getSuspiciousActivities,
+  updateUserProfile,
 } from "./db";
 import { adminRouter } from "./routers/admin";
+import { eq } from "drizzle-orm";
+import { desc } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 
 export const appRouter = router({
@@ -65,8 +64,15 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
-        // TODO: Implement profile update in database
-        return { success: true };
+        try {
+          await updateUserProfile(ctx.user.id, input);
+          return { success: true };
+        } catch (error) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to update profile",
+          });
+        }
       }),
 
     getStats: protectedProcedure.query(async ({ ctx }) => {
@@ -155,44 +161,7 @@ export const appRouter = router({
   }),
 
   // ============ ADMIN OPERATIONS ============
-  admin: router({
-    getStats: protectedProcedure.query(async ({ ctx }) => {
-      if (ctx.user.role !== "admin") {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
-      }
-      return await getAdminStats();
-    }),
-
-    listDisputes: protectedProcedure
-      .input(z.object({ limit: z.number().default(50), offset: z.number().default(0) }))
-      .query(async ({ ctx, input }) => {
-        if (ctx.user.role !== "admin") {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
-        }
-        return await getAllDisputes(input.limit, input.offset);
-      }),
-
-    resolveDispute: protectedProcedure
-      .input(z.object({ 
-        escrowId: z.number(), 
-        resolution: z.string(), 
-        status: z.enum(["completed", "cancelled"]) 
-      }))
-      .mutation(async ({ ctx, input }) => {
-        if (ctx.user.role !== "admin") {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
-        }
-        await resolveDispute(input.escrowId, input.resolution, input.status);
-        return { success: true };
-      }),
-
-    getSuspiciousActivities: protectedProcedure.query(async ({ ctx }) => {
-      if (ctx.user.role !== "admin") {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
-      }
-      return await getSuspiciousActivities();
-    }),
-  }),
+  // Moved to admin router
 
   // ============ ESCROW OPERATIONS ============
   escrow: router({
@@ -233,10 +202,10 @@ export const appRouter = router({
           amount: input.amount,
           commissionPercentage: input.commissionPercentage,
           commissionAmount,
-          paymentMethod: input.paymentMethod,
+          commissionPaidBy: "buyer",
           dealType: input.dealType,
           specifications: input.specifications,
-          status: "pending",
+          status: "draft",
         });
 
         return { success: true, escrowId: result[0].insertId };
@@ -307,14 +276,14 @@ export const appRouter = router({
           });
         }
 
-        if (escrow.status !== "pending") {
+        if (escrow.status !== "draft") {
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: "Transaction is not in pending status",
+            message: "Transaction is not in draft status",
           });
         }
 
-        // Update status to funded
+        // Update escrow status to funded
         await updateEscrowStatus(input.escrowId, "funded");
 
         // Create transaction record
@@ -322,53 +291,16 @@ export const appRouter = router({
           userId: ctx.user.id,
           type: "deposit",
           amount: escrow.amount,
-          referenceType: "escrow",
-          referenceId: input.escrowId,
           status: "completed",
-          description: `Deposit for escrow transaction: ${escrow.title}`,
-        });
+          escrowId: input.escrowId,
+          description: `Escrow deposit for transaction ${input.escrowId}`,
+          reference: input.transactionProof,
+        } as any);
 
         return { success: true };
       }),
 
     confirmDelivery: protectedProcedure
-      .input(
-        z.object({
-          escrowId: z.number(),
-          deliveryProof: z.string(),
-        })
-      )
-      .mutation(async ({ ctx, input }) => {
-        const escrow = await getEscrowById(input.escrowId);
-
-        if (!escrow) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Transaction not found",
-          });
-        }
-
-        if (escrow.sellerId !== ctx.user.id) {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "Only the seller can confirm delivery",
-          });
-        }
-
-        if (escrow.status !== "funded") {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Transaction is not in funded status",
-          });
-        }
-
-        // Update status to delivered
-        await updateEscrowStatus(input.escrowId, "delivered");
-
-        return { success: true };
-      }),
-
-    confirmReceipt: protectedProcedure
       .input(z.object({ escrowId: z.number() }))
       .mutation(async ({ ctx, input }) => {
         const escrow = await getEscrowById(input.escrowId);
@@ -383,7 +315,7 @@ export const appRouter = router({
         if (escrow.buyerId !== ctx.user.id) {
           throw new TRPCError({
             code: "FORBIDDEN",
-            message: "Only the buyer can confirm receipt",
+            message: "Only the buyer can confirm delivery",
           });
         }
 
@@ -394,35 +326,39 @@ export const appRouter = router({
           });
         }
 
-        // Update status to completed
+        // Update escrow status to completed
         await updateEscrowStatus(input.escrowId, "completed");
 
-        // Transfer funds to seller (minus commission)
-        const sellerAmount = (
-          parseFloat(escrow.amount) - parseFloat(escrow.commissionAmount)
-        ).toFixed(2);
+        return { success: true };
+      }),
 
-        // Create transaction for seller
-        await createTransaction({
-          userId: escrow.sellerId,
-          type: "deposit",
-          amount: sellerAmount,
-          referenceType: "escrow",
-          referenceId: input.escrowId,
-          status: "completed",
-          description: `Payment received for: ${escrow.title}`,
-        });
+    raiseDispute: protectedProcedure
+      .input(
+        z.object({
+          escrowId: z.number(),
+          reason: z.string(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const escrow = await getEscrowById(input.escrowId);
 
-        // Create transaction for commission
-        await createTransaction({
-          userId: 1, // Platform admin user
-          type: "commission",
-          amount: escrow.commissionAmount,
-          referenceType: "escrow",
-          referenceId: input.escrowId,
-          status: "completed",
-          description: `Commission from escrow: ${escrow.title}`,
-        });
+        if (!escrow) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Transaction not found",
+          });
+        }
+
+        // Verify user is part of the transaction
+        if (escrow.buyerId !== ctx.user.id && escrow.sellerId !== ctx.user.id) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "You don't have access to this transaction",
+          });
+        }
+
+        // Update escrow status to disputed
+        await updateEscrowStatus(input.escrowId, "disputed");
 
         return { success: true };
       }),
@@ -433,33 +369,25 @@ export const appRouter = router({
     createProduct: protectedProcedure
       .input(
         z.object({
-          name: z.string(),
+          title: z.string(),
           description: z.string().optional(),
           category: z.string(),
-          price: z.string(),
-          quantity: z.number(),
-          image: z.string().optional(),
+          price: z.string().refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) > 0, { message: "Price must be a positive number" }),
+          thumbnailUrl: z.string().optional(),
+          previewUrl: z.string().optional(),
           deliveryType: z.enum(["instant", "manual", "email"]).default("manual"),
           productCodes: z.array(z.string()).optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
-        // Verify user is a seller
-        if (ctx.user.userType !== "seller" && ctx.user.userType !== "both") {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "Only sellers can create products",
-          });
-        }
-
         const result = await createDigitalProduct({
           sellerId: ctx.user.id,
-          name: input.name,
+          title: input.title,
           description: input.description,
           category: input.category,
           price: input.price,
-          quantity: input.quantity,
-          image: input.image,
+          thumbnailUrl: input.thumbnailUrl,
+          previewUrl: input.previewUrl,
           deliveryType: input.deliveryType,
           productCodes: input.productCodes,
           isActive: true,
@@ -474,28 +402,29 @@ export const appRouter = router({
         return await getDigitalProductById(input.id);
       }),
 
-    getMyProducts: protectedProcedure
+    getSellerProducts: publicProcedure
       .input(
         z.object({
+          sellerId: z.number(),
           limit: z.number().default(50),
           offset: z.number().default(0),
         })
       )
-      .query(async ({ ctx, input }) => {
-        return await getSellerProducts(ctx.user.id, input.limit, input.offset);
+      .query(async ({ input }) => {
+        return await getSellerProducts(input.sellerId, input.limit, input.offset);
       }),
 
     searchProducts: publicProcedure
       .input(
         z.object({
-          query: z.string().optional(),
+          query: z.string(),
           category: z.string().optional(),
           limit: z.number().default(50),
           offset: z.number().default(0),
         })
       )
       .query(async ({ input }) => {
-        return await searchProducts(input.query || "", input.category, input.limit, input.offset);
+        return await searchProducts(input.query, input.category, input.limit, input.offset);
       }),
   }),
 
@@ -521,7 +450,7 @@ export const appRouter = router({
           escrowId: input.escrowId,
           productPurchaseId: input.productPurchaseId,
           reviewType: input.reviewType,
-        });
+        } as any);
 
         return { success: true, reviewId: result[0].insertId };
       }),
@@ -540,7 +469,6 @@ export const appRouter = router({
   }),
 
   // ============ TRUSTED SELLER OPERATIONS ============
-  // ============ ADMIN OPERATIONS ============
   admin: adminRouter,
   trustedSeller: router({
     subscribeToPlan: protectedProcedure

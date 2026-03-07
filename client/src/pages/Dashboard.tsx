@@ -83,7 +83,7 @@ export default function Dashboard() {
               <Clock className="text-blue-500" size={20} />
               متابعة آخر صفقة: {myTransactions[0].title}
             </h3>
-            <TransactionStepper currentStep={myTransactions[0].status === 'pending' ? 1 : 2} />
+            <TransactionStepper currentStep={myTransactions[0].status === 'draft' ? 1 : 2} />
           </Card>
         )}
 

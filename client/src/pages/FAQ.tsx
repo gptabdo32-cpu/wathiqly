@@ -1,5 +1,6 @@
-import { Card } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { HelpCircle, ShieldCheck, Wallet, RefreshCcw } from "lucide-react";
 
 export default function FAQ() {

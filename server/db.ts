@@ -534,3 +534,15 @@ export async function createAdminLog(log: InsertAdminLog) {
 
 // Helper function to import or
 import { or } from "drizzle-orm";
+
+export async function updateUserProfile(userId: number, updates: Partial<InsertUser>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const { eq } = await import("drizzle-orm");
+  
+  return await db
+    .update(users)
+    .set(updates)
+    .where(eq(users.id, userId));
+}

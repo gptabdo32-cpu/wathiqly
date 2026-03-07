@@ -5,22 +5,15 @@
     {
       "idx": 0,
       "version": "5",
-      "when": 1772753075249,
-      "tag": "0000_deep_quasimodo",
+      "when": 1772912441409,
+      "tag": "0000_strong_scalphunter",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "5",
-      "when": 1772754611383,
-      "tag": "0001_small_swordsman",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "5",
-      "when": 1772865127165,
-      "tag": "0002_absent_tigra",
+      "when": 1772912543726,
+      "tag": "0001_glossy_white_queen",
       "breakpoints": true
     }
   ]

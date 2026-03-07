@@ -312,18 +312,17 @@
   }
 }
 
-315	/* Privacy Mode Styles */
-316	.privacy-mode .balance-amount {
-317	  filter: blur(8px);
-318	  transition: filter 0.3s ease;
-319	}
-320	
-321	.privacy-mode .balance-amount:hover {
-322	  filter: blur(0);
-323	}
-324	
-325	/* Arabic Font Support */
-326	.font-arabic {
-327	  font-family: 'Cairo', sans-serif;
-328	}
-329	
+/* Privacy Mode Styles */
+.privacy-mode .balance-amount {
+  filter: blur(8px);
+  transition: filter 0.3s ease;
+}
+
+.privacy-mode .balance-amount:hover {
+  filter: blur(0);
+}
+
+/* Arabic Font Support */
+.font-arabic {
+  font-family: 'Cairo', sans-serif;
+}

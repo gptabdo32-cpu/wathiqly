@@ -9,20 +9,10 @@ import Home from "./pages/Home";
 import Dashboard from './pages/Dashboard';
 import Profile from './pages/Profile';
 import CreateTransaction from './pages/CreateTransaction';
-import AdminDashboard from './pages/AdminDashboard';
+import Products from './pages/Products';
+import SelectUserType from './pages/SelectUserType';
 import FAQ from './pages/FAQ';
 import Terms from './pages/Terms';
-import UserManagement from './pages/admin/UserManagement';
-import UserDetails from './pages/admin/UserDetails';
-import TransactionManagement from './pages/admin/TransactionManagement';
-import TransactionDetails from './pages/admin/TransactionDetails';
-import NotificationManagement from './pages/admin/NotificationManagement';
-import SettingsManagement from './pages/admin/SettingsManagement';
-import AdminLogs from './pages/admin/AdminLogs';
-import ProductManagement from './pages/admin/ProductManagement';
-import CommissionStats from './pages/admin/CommissionStats';
-import DisputeManagement from './pages/admin/DisputeManagement';
-import AdminLayout from './components/AdminLayout';
 
 function Router() {
   return (
@@ -31,23 +21,12 @@ function Router() {
       <Route path={'/dashboard'} component={Dashboard} />
       <Route path={'/profile'} component={Profile} />
       <Route path={'/create-transaction'} component={CreateTransaction} />
-      <Route path={'/admin'} component={AdminDashboard} />
-      <Route path={'/admin/users'} component={() => <AdminLayout><UserManagement /></AdminLayout>} />
-      <Route path={'/admin/users/:id'} component={() => <AdminLayout><UserDetails /></AdminLayout>} />
-      <Route path={'/admin/transactions'} component={() => <AdminLayout><TransactionManagement /></AdminLayout>} />
-      <Route path={'/admin/transactions/:id'} component={() => <AdminLayout><TransactionDetails /></AdminLayout>} />
-      <Route path={'/admin/notifications'} component={() => <AdminLayout><NotificationManagement /></AdminLayout>} />
-      <Route path={'/admin/settings'} component={() => <AdminLayout><SettingsManagement /></AdminLayout>} />
-      <Route path={'/admin/logs'} component={() => <AdminLayout><AdminLogs /></AdminLayout>} />
-      <Route path={'/admin/products'} component={() => <AdminLayout><ProductManagement /></AdminLayout>} />
-      <Route path={'/admin/commissions'} component={() => <AdminLayout><CommissionStats /></AdminLayout>} />
-      <Route path={'/admin/disputes'} component={() => <AdminLayout><DisputeManagement /></AdminLayout>} />
+      <Route path={'/products'} component={Products} />
+      <Route path={'/select-user-type'} component={SelectUserType} />
+      {/* Admin routes - to be implemented */}
       <Route path={'/faq'} component={FAQ} />
       <Route path={'/terms'} component={Terms} />
       <Route path={'/404'} component={NotFound} />
-      {/* TODO: Add products route */}
-      {/* TODO: Add wallet routes */}
-      {/* TODO: Add reviews routes */}
       {/* Final fallback route */}
       <Route component={NotFound} />
     </Switch>

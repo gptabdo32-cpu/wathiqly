@@ -70,10 +70,10 @@ export default function Home() {
             {isAuthenticated ? (
               <>
                 <Button size="lg" asChild>
-                  <Link href="/dashboard">اذهب إلى لوحة التحكم</Link>
+                  <Link href="/select-user-type">اختر نوع حسابك</Link>
                 </Button>
                 <Button size="lg" variant="outline" asChild>
-                  <Link href="/products">تصفح المنتجات</Link>
+                  <Link href="/dashboard">اذهب إلى لوحة التحكم</Link>
                 </Button>
               </>
             ) : (
