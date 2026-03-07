@@ -9,204 +9,189 @@ import {
   DollarSign,
   Gavel,
   AlertTriangle,
-  CheckCircle,
-  XCircle,
-  Clock,
+  Settings,
+  BarChart3,
+  LogOut,
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { toast } from "sonner";
 
 export default function AdminDashboard() {
   const { user, isAuthenticated, loading } = useAuth();
 
-  const { data: stats, refetch: refetchStats } = trpc.admin.getStats.useQuery(undefined, {
-    enabled: isAuthenticated && user?.role === "admin",
-  });
-
-  const { data: disputes, refetch: refetchDisputes } = trpc.admin.listDisputes.useQuery({}, {
-    enabled: isAuthenticated && user?.role === "admin",
-  });
-
-  const { data: suspicious } = trpc.admin.getSuspiciousActivities.useQuery(undefined, {
-    enabled: isAuthenticated && user?.role === "admin",
-  });
-
-  const resolveMutation = trpc.admin.resolveDispute.useMutation({
-    onSuccess: () => {
-      toast.success("تم حل النزاع بنجاح");
-      refetchDisputes();
-      refetchStats();
-    },
-    onError: (err) => {
-      toast.error("فشل حل النزاع: " + err.message);
-    }
-  });
-
   if (loading) return <div className="p-8 text-center">جاري التحميل...</div>;
   if (!isAuthenticated || user?.role !== "admin") return <Redirect to="/" />;
 
-  const handleResolve = (id: number, status: "completed" | "cancelled") => {
-    const resolution = prompt("أدخل تفاصيل حل النزاع:");
-    if (resolution) {
-      resolveMutation.mutate({ escrowId: id, resolution, status });
-    }
-  };
+  const adminMenuItems = [
+    {
+      title: "إدارة المستخدمين",
+      description: "عرض وإدارة جميع المستخدمين والتحقق من هويتهم",
+      icon: Users,
+      color: "bg-blue-100",
+      iconColor: "text-blue-600",
+    },
+    {
+      title: "إدارة المعاملات",
+      description: "مراقبة جميع المعاملات والمدفوعات على المنصة",
+      icon: DollarSign,
+      color: "bg-green-100",
+      iconColor: "text-green-600",
+    },
+    {
+      title: "إدارة النزاعات",
+      description: "حل النزاعات بين المشترين والبائعين",
+      icon: Gavel,
+      color: "bg-orange-100",
+      iconColor: "text-orange-600",
+    },
+    {
+      title: "الأنشطة المريبة",
+      description: "مراقبة الأنشطة المريبة والاحتيالية",
+      icon: AlertTriangle,
+      color: "bg-red-100",
+      iconColor: "text-red-600",
+    },
+    {
+      title: "الإحصائيات",
+      description: "عرض إحصائيات المنصة والعمولات",
+      icon: BarChart3,
+      color: "bg-purple-100",
+      iconColor: "text-purple-600",
+    },
+    {
+      title: "الإعدادات",
+      description: "إدارة إعدادات المنصة والسياسات",
+      icon: Settings,
+      color: "bg-gray-100",
+      iconColor: "text-gray-600",
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-slate-50 py-8 font-arabic" dir="rtl">
-      <div className="container mx-auto px-4">
-        <div className="flex items-center gap-3 mb-8">
-          <ShieldAlert className="w-8 h-8 text-red-600" />
-          <h1 className="text-3xl font-bold text-slate-900">لوحة التحكم الإدارية</h1>
-        </div>
-
-        {/* Stats Grid */}
-        <div className="grid md:grid-cols-4 gap-6 mb-8">
-          <Link href="/admin/commissions">
-            <Card className="p-6 border-r-4 border-r-blue-500 cursor-pointer hover:shadow-md transition-shadow">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-sm text-slate-500 mb-1">إجمالي الأموال المحجوزة</p>
-                  <p className="text-2xl font-bold text-slate-900">{stats?.totalVolume || "0"} ل.د</p>
-                </div>
-                <DollarSign className="w-8 h-8 text-blue-500 opacity-20" />
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 py-8 font-arabic" dir="rtl">
+      <div className="container max-w-6xl mx-auto px-4">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-lg bg-red-100 flex items-center justify-center">
+                <ShieldAlert className="w-6 h-6 text-red-600" />
               </div>
-            </Card>
-          </Link>
-
-          <Link href="/admin/disputes">
-            <Card className="p-6 border-r-4 border-r-red-500 cursor-pointer hover:shadow-md transition-shadow">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-sm text-slate-500 mb-1">نزاعات نشطة</p>
-                  <p className="text-2xl font-bold text-slate-900">{stats?.activeDisputes || "0"}</p>
-                </div>
-                <Gavel className="w-8 h-8 text-red-500 opacity-20" />
+              <div>
+                <h1 className="text-3xl font-bold text-slate-900">لوحة التحكم الإدارية</h1>
+                <p className="text-sm text-slate-600">مرحباً، {user?.name}</p>
               </div>
-            </Card>
-          </Link>
-
-          <Link href="/admin/users">
-            <Card className="p-6 border-r-4 border-r-green-500 cursor-pointer hover:shadow-md transition-shadow">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-sm text-slate-500 mb-1">إجمالي المستخدمين</p>
-                  <p className="text-2xl font-bold text-slate-900">{stats?.totalUsers || "0"}</p>
-                </div>
-                <Users className="w-8 h-8 text-green-500 opacity-20" />
-              </div>
-            </Card>
-          </Link>
-
-          <Link href="/admin/transactions">
-            <Card className="p-6 border-r-4 border-r-purple-500 cursor-pointer hover:shadow-md transition-shadow">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-sm text-slate-500 mb-1">إجمالي العمليات</p>
-                  <p className="text-2xl font-bold text-slate-900">{stats?.totalTransactions || "0"}</p>
-                </div>
-                <ShieldAlert className="w-8 h-8 text-purple-500 opacity-20" />
-              </div>
-            </Card>
-          </Link>
-        </div>
-
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* Disputes Table */}
-          <div className="lg:col-span-2">
-            <Card className="p-6">
-              <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-                <Gavel className="text-red-500" size={20} />
-                إدارة النزاعات المعقدة
-              </h2>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-right">الصفقة</TableHead>
-                    <TableHead className="text-right">المبلغ</TableHead>
-                    <TableHead className="text-right">السبب</TableHead>
-                    <TableHead className="text-right">الإجراء</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {disputes && disputes.length > 0 ? (
-                    disputes.map((dispute) => (
-                      <TableRow key={dispute.id}>
-                        <TableCell className="font-medium">{dispute.title}</TableCell>
-                        <TableCell>{dispute.amount} ل.د</TableCell>
-                        <TableCell className="max-w-[200px] truncate text-slate-500">
-                          {dispute.disputeReason}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button 
-                              size="sm" 
-                              variant="outline" 
-                              className="text-green-600 hover:text-green-700"
-                              onClick={() => handleResolve(dispute.id, "completed")}
-                            >
-                              <CheckCircle size={14} className="ml-1" />
-                              لصالح البائع
-                            </Button>
-                            <Button 
-                              size="sm" 
-                              variant="outline" 
-                              className="text-red-600 hover:text-red-700"
-                              onClick={() => handleResolve(dispute.id, "cancelled")}
-                            >
-                              <XCircle size={14} className="ml-1" />
-                              لصالح المشتري
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center py-8 text-slate-400">
-                        لا توجد نزاعات حالية تتطلب التدخل
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </Card>
+            </div>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/">
+                <LogOut className="w-4 h-4 ml-2" />
+                العودة للرئيسية
+              </Link>
+            </Button>
           </div>
 
-          {/* Suspicious Activities */}
-          <div>
-            <Card className="p-6 border-amber-100 bg-amber-50/30">
-              <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-amber-700">
-                <AlertTriangle size={20} />
-                أنشطة مشبوهة
-              </h2>
-              <div className="space-y-4">
-                {suspicious && suspicious.length > 0 ? (
-                  suspicious.map((act, i) => (
-                    <div key={i} className="p-4 bg-white rounded-lg border border-amber-200 shadow-sm">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-bold text-slate-900">مستخدم #{act.userId}</span>
-                        <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-bold">
-                          {act.count} طلبات/دقيقة
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-600 leading-relaxed">
-                        {act.reason}
-                      </p>
-                      <Button variant="link" className="p-0 h-auto text-xs text-blue-600 mt-2">
-                        عرض سجل المستخدم
+          {/* Quick Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Card className="p-6 bg-white border-l-4 border-blue-500">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-slate-600">إجمالي المستخدمين</p>
+                  <p className="text-2xl font-bold text-slate-900">-</p>
+                </div>
+                <Users className="w-8 h-8 text-blue-500 opacity-50" />
+              </div>
+            </Card>
+
+            <Card className="p-6 bg-white border-l-4 border-green-500">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-slate-600">إجمالي المعاملات</p>
+                  <p className="text-2xl font-bold text-slate-900">-</p>
+                </div>
+                <DollarSign className="w-8 h-8 text-green-500 opacity-50" />
+              </div>
+            </Card>
+
+            <Card className="p-6 bg-white border-l-4 border-orange-500">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-slate-600">النزاعات النشطة</p>
+                  <p className="text-2xl font-bold text-slate-900">-</p>
+                </div>
+                <Gavel className="w-8 h-8 text-orange-500 opacity-50" />
+              </div>
+            </Card>
+
+            <Card className="p-6 bg-white border-l-4 border-red-500">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-slate-600">الأنشطة المريبة</p>
+                  <p className="text-2xl font-bold text-slate-900">-</p>
+                </div>
+                <AlertTriangle className="w-8 h-8 text-red-500 opacity-50" />
+              </div>
+            </Card>
+          </div>
+        </div>
+
+        {/* Admin Menu */}
+        <div className="mb-8">
+          <h2 className="text-xl font-bold text-slate-900 mb-6">أدوات الإدارة</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {adminMenuItems.map((item, idx) => {
+              const IconComponent = item.icon;
+              return (
+                <Card
+                  key={idx}
+                  className="p-6 hover:shadow-lg transition-all cursor-pointer hover:scale-105 bg-white"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className={`w-12 h-12 rounded-lg ${item.color} flex items-center justify-center flex-shrink-0`}>
+                      <IconComponent className={`w-6 h-6 ${item.iconColor}`} />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-bold text-slate-900 mb-1">{item.title}</h3>
+                      <p className="text-sm text-slate-600 mb-4">{item.description}</p>
+                      <Button size="sm" className="w-full">
+                        الدخول
                       </Button>
                     </div>
-                  ))
-                ) : (
-                  <div className="text-center py-8 text-amber-600/50">
-                    <Clock className="mx-auto mb-2 opacity-20" />
-                    <p className="text-xs">لا توجد تنبيهات أمنية حالياً</p>
                   </div>
-                )}
-              </div>
-            </Card>
+                </Card>
+              );
+            })}
           </div>
+        </div>
+
+        {/* Recent Activity */}
+        <Card className="p-6 bg-white">
+          <h2 className="text-xl font-bold text-slate-900 mb-6">الأنشطة الأخيرة</h2>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-right">النوع</TableHead>
+                  <TableHead className="text-right">الوصف</TableHead>
+                  <TableHead className="text-right">الوقت</TableHead>
+                  <TableHead className="text-right">الحالة</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-slate-500 py-8">
+                    لا توجد أنشطة حالياً
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+        </Card>
+
+        {/* Admin Info */}
+        <div className="mt-8 p-6 bg-blue-50 border border-blue-200 rounded-lg">
+          <h3 className="font-bold text-blue-900 mb-2">معلومات المسؤول</h3>
+          <p className="text-sm text-blue-800">
+            أنت الآن في لوحة التحكم الإدارية. يمكنك من هنا إدارة جميع جوانب المنصة بما في ذلك المستخدمين والمعاملات والنزاعات والأمان.
+          </p>
         </div>
       </div>
     </div>

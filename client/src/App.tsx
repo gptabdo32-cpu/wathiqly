@@ -11,6 +11,7 @@ import Profile from './pages/Profile';
 import CreateTransaction from './pages/CreateTransaction';
 import Products from './pages/Products';
 import SelectUserType from './pages/SelectUserType';
+import AdminDashboard from './pages/AdminDashboard';
 import FAQ from './pages/FAQ';
 import Terms from './pages/Terms';
 
@@ -23,7 +24,7 @@ function Router() {
       <Route path={'/create-transaction'} component={CreateTransaction} />
       <Route path={'/products'} component={Products} />
       <Route path={'/select-user-type'} component={SelectUserType} />
-      {/* Admin routes - to be implemented */}
+      <Route path={'/admin'} component={AdminDashboard} />
       <Route path={'/faq'} component={FAQ} />
       <Route path={'/terms'} component={Terms} />
       <Route path={'/404'} component={NotFound} />
