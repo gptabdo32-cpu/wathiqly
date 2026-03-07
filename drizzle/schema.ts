@@ -35,6 +35,9 @@ export const users = mysqlTable("users", {
   isEmailVerified: boolean("isEmailVerified").default(false),
   isPhoneVerified: boolean("isPhoneVerified").default(false),
   isIdentityVerified: boolean("isIdentityVerified").default(false),
+  identityDocumentUrl: text("identityDocumentUrl"), // URL to uploaded identity document
+  identityVerifiedAt: timestamp("identityVerifiedAt"),
+  phoneNumberVerifiedAt: timestamp("phoneNumberVerifiedAt"),
   
   // Trusted seller badge
   isTrustedSeller: boolean("isTrustedSeller").default(false),
@@ -386,3 +389,50 @@ export const adminLogs = mysqlTable("adminLogs", {
 
 export type AdminLog = typeof adminLogs.$inferSelect;
 export type InsertAdminLog = typeof adminLogs.$inferInsert;
+
+/**
+ * Dispute Messages table - stores messages exchanged during a dispute
+ */
+export const disputeMessages = mysqlTable("disputeMessages", {
+  id: int("id").autoincrement().primaryKey(),
+  escrowId: int("escrowId").notNull(),
+  senderId: int("senderId").notNull(),
+  message: text("message").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type DisputeMessage = typeof disputeMessages.$inferSelect;
+export type InsertDisputeMessage = typeof disputeMessages.$inferInsert;
+
+/**
+ * Dispute Evidence table - stores links to evidence files uploaded during a dispute
+ */
+export const disputeEvidence = mysqlTable("disputeEvidence", {
+  id: int("id").autoincrement().primaryKey(),
+  escrowId: int("escrowId").notNull(),
+  uploaderId: int("uploaderId").notNull(),
+  fileUrl: text("fileUrl").notNull(),
+  fileType: varchar("fileType", { length: 50 }), // e.g., "image", "video", "document"
+  description: text("description"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type DisputeEvidence = typeof disputeEvidence.$inferSelect;
+export type InsertDisputeEvidence = typeof disputeEvidence.$inferInsert;
+
+/**
+ * Notifications table - stores user notifications
+ */
+export const notifications = mysqlTable("notifications", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  type: mysqlEnum("type", ["transaction", "dispute", "system", "marketing"]).notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  message: text("message").notNull(),
+  isRead: boolean("isRead").default(false),
+  link: text("link"), // Optional link to related page
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = typeof notifications.$inferInsert;
