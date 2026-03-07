@@ -1,4 +1,4 @@
-import { db } from "./_core/db";
+import { getDb } from "./db";
 import { eq, and } from "drizzle-orm";
 import {
   users,
@@ -23,7 +23,7 @@ export async function createFinancialTransaction(
   referenceId: number,
   description: string
 ) {
-  return await db.transaction(async (tx) => {
+  const db = await getDb(); if (!db) throw new Error("Database not available"); return await db.transaction(async (tx) => {
     // Create transaction record
     const result = await tx.insert(transactions).values({
       userId,
@@ -48,7 +48,7 @@ export async function updateWalletBalance(
   amountChange: string,
   operation: "add" | "subtract"
 ) {
-  return await db.transaction(async (tx) => {
+  const db = await getDb(); if (!db) throw new Error("Database not available"); return await db.transaction(async (tx) => {
     // Get current wallet
     const wallet = await tx.query.wallets.findFirst({
       where: eq(wallets.userId, userId),
@@ -86,7 +86,7 @@ export async function updateWalletBalance(
  * Ensures money transfer from buyer to seller is atomic
  */
 export async function processEscrowCompletion(escrowId: number) {
-  return await db.transaction(async (tx) => {
+  const db = await getDb(); if (!db) throw new Error("Database not available"); return await db.transaction(async (tx) => {
     // Get escrow details
     const escrow = await tx.query.escrows.findFirst({
       where: eq(escrows.id, escrowId),
@@ -172,7 +172,7 @@ export async function addDisputeMessage(
 ) {
   const messageContent = shouldEncrypt ? encryptData(message) : message;
 
-  return await db.insert(disputeMessages).values({
+  const db = await getDb(); if (!db) throw new Error("Database not available"); return await db.insert(disputeMessages).values({
     escrowId,
     senderId,
     message: messageContent,
@@ -183,7 +183,7 @@ export async function addDisputeMessage(
  * Get dispute messages with decryption
  */
 export async function getDisputeMessages(escrowId: number) {
-  const messages = await db.query.disputeMessages.findMany({
+  const db = await getDb(); if (!db) throw new Error("Database not available"); const messages = await db.query.disputeMessages.findMany({
     where: eq(disputeMessages.escrowId, escrowId),
   });
 
@@ -203,7 +203,7 @@ export async function uploadDisputeEvidence(
   fileType: string,
   description?: string
 ) {
-  return await db.insert(disputeEvidence).values({
+  const db = await getDb(); if (!db) throw new Error("Database not available"); return await db.insert(disputeEvidence).values({
     escrowId,
     uploaderId,
     fileUrl,
@@ -222,7 +222,7 @@ export async function createNotification(
   message: string,
   link?: string
 ) {
-  return await db.insert(notifications).values({
+  const db = await getDb(); if (!db) throw new Error("Database not available"); return await db.insert(notifications).values({
     userId,
     type,
     title,
@@ -235,7 +235,7 @@ export async function createNotification(
  * Get unread notifications for user
  */
 export async function getUnreadNotifications(userId: number) {
-  return await db.query.notifications.findMany({
+  const db = await getDb(); if (!db) throw new Error("Database not available"); return await db.query.notifications.findMany({
     where: and(
       eq(notifications.userId, userId),
       eq(notifications.isRead, false)
@@ -247,7 +247,7 @@ export async function getUnreadNotifications(userId: number) {
  * Mark notification as read
  */
 export async function markNotificationAsRead(notificationId: number) {
-  return await db.update(notifications).set({
+  const db = await getDb(); if (!db) throw new Error("Database not available"); return await db.update(notifications).set({
     isRead: true,
   }).where(eq(notifications.id, notificationId));
 }
