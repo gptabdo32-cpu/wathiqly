@@ -12,6 +12,10 @@ import CreateTransaction from './pages/CreateTransaction';
 import AdminDashboard from './pages/AdminDashboard';
 import FAQ from './pages/FAQ';
 import Terms from './pages/Terms';
+import UserManagement from './pages/admin/UserManagement';
+import TransactionManagement from './pages/admin/TransactionManagement';
+import DisputeManagement from './pages/admin/DisputeManagement';
+import AdminLayout from './components/AdminLayout';
 
 function Router() {
   return (
@@ -21,6 +25,9 @@ function Router() {
       <Route path={'/profile'} component={Profile} />
       <Route path={'/create-transaction'} component={CreateTransaction} />
       <Route path={'/admin'} component={AdminDashboard} />
+      <Route path={'/admin/users'} component={() => <AdminLayout><UserManagement /></AdminLayout>} />
+      <Route path={'/admin/transactions'} component={() => <AdminLayout><TransactionManagement /></AdminLayout>} />
+      <Route path={'/admin/disputes'} component={() => <AdminLayout><DisputeManagement /></AdminLayout>} />
       <Route path={'/faq'} component={FAQ} />
       <Route path={'/terms'} component={Terms} />
       <Route path={'/404'} component={NotFound} />

@@ -251,3 +251,334 @@ export async function markNotificationAsRead(notificationId: number) {
     isRead: true,
   }).where(eq(notifications.id, notificationId));
 }
+
+// ============ ADMIN OPERATIONS ============
+
+import { like, or, desc } from "drizzle-orm";
+import { adminLogs, disputes } from "../drizzle/schema";
+
+/**
+ * الحصول على جميع المستخدمين مع إمكانية البحث والتصفية
+ */
+export async function getAllUsers(options?: {
+  search?: string;
+  kycStatus?: "verified" | "pending" | "rejected";
+  status?: "active" | "suspended";
+  limit?: number;
+  offset?: number;
+}) {
+  const db = await getDb();
+  if (!db) return [];
+
+  let query = db.select().from(users);
+
+  // البحث عن الاسم أو البريد الإلكتروني
+  if (options?.search) {
+    query = query.where(
+      or(
+        like(users.name, `%${options.search}%`),
+        like(users.email, `%${options.search}%`)
+      )
+    );
+  }
+
+  // تصفية حسب حالة KYC
+  if (options?.kycStatus) {
+    query = query.where(eq(users.kycStatus, options.kycStatus));
+  }
+
+  // تصفية حسب حالة الحساب
+  if (options?.status) {
+    query = query.where(eq(users.status, options.status));
+  }
+
+  // الترتيب والحد
+  query = query
+    .orderBy(desc(users.createdAt))
+    .limit(options?.limit || 50)
+    .offset(options?.offset || 0);
+
+  try {
+    const result = await query;
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get users:", error);
+    return [];
+  }
+}
+
+/**
+ * تحديث حالة KYC للمستخدم
+ */
+export async function updateUserKycStatus(
+  userId: number,
+  status: "verified" | "pending" | "rejected"
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    await db
+      .update(users)
+      .set({
+        kycStatus: status,
+        identityVerifiedAt: status === "verified" ? new Date() : null,
+      })
+      .where(eq(users.id, userId));
+  } catch (error) {
+    console.error("[Database] Failed to update KYC status:", error);
+    throw error;
+  }
+}
+
+/**
+ * تحديث حالة الحساب (نشط/معلق)
+ */
+export async function updateUserStatus(
+  userId: number,
+  status: "active" | "suspended"
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    await db
+      .update(users)
+      .set({ status })
+      .where(eq(users.id, userId));
+  } catch (error) {
+    console.error("[Database] Failed to update user status:", error);
+    throw error;
+  }
+}
+
+/**
+ * الحصول على جميع المعاملات مع إمكانية البحث والتصفية
+ */
+export async function getAllTransactions(options?: {
+  search?: string;
+  status?: "pending" | "completed" | "cancelled";
+  limit?: number;
+  offset?: number;
+}) {
+  const db = await getDb();
+  if (!db) return [];
+
+  let query = db.select().from(escrows);
+
+  // البحث
+  if (options?.search) {
+    query = query.where(
+      or(
+        like(escrows.title, `%${options.search}%`),
+        like(escrows.description, `%${options.search}%`)
+      )
+    );
+  }
+
+  // تصفية حسب الحالة
+  if (options?.status) {
+    query = query.where(eq(escrows.status, options.status));
+  }
+
+  query = query
+    .orderBy(desc(escrows.createdAt))
+    .limit(options?.limit || 50)
+    .offset(options?.offset || 0);
+
+  try {
+    const result = await query;
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get transactions:", error);
+    return [];
+  }
+}
+
+/**
+ * تحديث حالة المعاملة (الوساطة)
+ */
+export async function updateEscrowStatus(
+  escrowId: number,
+  status: "pending" | "completed" | "cancelled"
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    await db
+      .update(escrows)
+      .set({
+        status,
+        completedAt: status === "completed" ? new Date() : null,
+      })
+      .where(eq(escrows.id, escrowId));
+  } catch (error) {
+    console.error("[Database] Failed to update escrow status:", error);
+    throw error;
+  }
+}
+
+/**
+ * الحصول على جميع النزاعات مع إمكانية البحث والتصفية
+ */
+export async function getAllDisputes(options?: {
+  search?: string;
+  status?: "open" | "in_review" | "resolved";
+  limit?: number;
+  offset?: number;
+}) {
+  const db = await getDb();
+  if (!db) return [];
+
+  let query = db.select().from(disputes);
+
+  // البحث
+  if (options?.search) {
+    query = query.where(
+      or(
+        like(disputes.reason, `%${options.search}%`),
+        like(disputes.resolution, `%${options.search}%`)
+      )
+    );
+  }
+
+  // تصفية حسب الحالة
+  if (options?.status) {
+    query = query.where(eq(disputes.status, options.status));
+  }
+
+  query = query
+    .orderBy(desc(disputes.createdAt))
+    .limit(options?.limit || 50)
+    .offset(options?.offset || 0);
+
+  try {
+    const result = await query;
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get disputes:", error);
+    return [];
+  }
+}
+
+/**
+ * حل النزاع
+ */
+export async function resolveDispute(options: {
+  disputeId: number;
+  decision: "buyer" | "seller";
+  resolution: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    await db
+      .update(disputes)
+      .set({
+        status: "resolved",
+        resolution: options.resolution,
+        resolvedAt: new Date(),
+      })
+      .where(eq(disputes.id, options.disputeId));
+  } catch (error) {
+    console.error("[Database] Failed to resolve dispute:", error);
+    throw error;
+  }
+}
+
+/**
+ * إنشاء سجل إجراء إداري
+ */
+export async function createAdminLog(options: {
+  adminId: number;
+  action: string;
+  targetUserId?: number;
+  targetEscrowId?: number;
+  targetDisputeId?: number;
+  details: string;
+}) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot create admin log: database not available");
+    return;
+  }
+
+  try {
+    await db.insert(adminLogs).values({
+      adminId: options.adminId,
+      action: options.action,
+      targetUserId: options.targetUserId,
+      targetEscrowId: options.targetEscrowId,
+      targetDisputeId: options.targetDisputeId,
+      details: options.details,
+      createdAt: new Date(),
+    });
+  } catch (error) {
+    console.error("[Database] Failed to create admin log:", error);
+  }
+}
+
+/**
+ * الحصول على إحصائيات لوحة التحكم
+ */
+export async function getAdminStats() {
+  const db = await getDb();
+  if (!db) {
+    return {
+      totalUsers: 0,
+      totalVolume: 0,
+      activeDisputes: 0,
+      totalTransactions: 0,
+    };
+  }
+
+  try {
+    // إجمالي المستخدمين
+    const userCount = await db
+      .select({ count: db.sql<number>`COUNT(*)` })
+      .from(users);
+
+    // إجمالي الأموال المحجوزة
+    const volumeResult = await db
+      .select({ total: db.sql<number>`SUM(amount)` })
+      .from(escrows)
+      .where(eq(escrows.status, "pending"));
+
+    // النزاعات النشطة
+    const disputeCount = await db
+      .select({ count: db.sql<number>`COUNT(*)` })
+      .from(disputes)
+      .where(eq(disputes.status, "open"));
+
+    // إجمالي المعاملات
+    const transactionCount = await db
+      .select({ count: db.sql<number>`COUNT(*)` })
+      .from(escrows);
+
+    return {
+      totalUsers: userCount[0]?.count || 0,
+      totalVolume: volumeResult[0]?.total || 0,
+      activeDisputes: disputeCount[0]?.count || 0,
+      totalTransactions: transactionCount[0]?.count || 0,
+    };
+  } catch (error) {
+    console.error("[Database] Failed to get admin stats:", error);
+    return {
+      totalUsers: 0,
+      totalVolume: 0,
+      activeDisputes: 0,
+      totalTransactions: 0,
+    };
+  }
+}
+
+/**
+ * الحصول على الأنشطة المشبوهة
+ */
+export async function getSuspiciousActivities() {
+  // هذه دالة تحتاج إلى تطبيق منطق كشف الأنشطة المشبوهة
+  // يمكن توسيعها لاحقاً لتشمل كشف محاولات الاحتيال والهجمات
+  return [];
+}

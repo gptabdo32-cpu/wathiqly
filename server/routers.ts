@@ -30,6 +30,7 @@ import {
   resolveDispute,
   getSuspiciousActivities,
 } from "./db";
+import { adminRouter } from "./routers/admin";
 import { TRPCError } from "@trpc/server";
 
 export const appRouter = router({
@@ -535,6 +536,8 @@ export const appRouter = router({
   }),
 
   // ============ TRUSTED SELLER OPERATIONS ============
+  // ============ ADMIN OPERATIONS ============
+  admin: adminRouter,
   trustedSeller: router({
     subscribeToPlan: protectedProcedure
       .input(
