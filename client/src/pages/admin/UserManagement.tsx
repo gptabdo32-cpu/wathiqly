@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
-import { Redirect } from "wouter";
+import { Redirect, Link } from "wouter";
 import {
   Users,
   Search,
@@ -202,14 +202,16 @@ export default function UserManagement() {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-blue-600 hover:text-blue-700"
-                          title="عرض التفاصيل"
-                        >
-                          <Eye size={16} />
-                        </Button>
+                        <Link href={`/admin/users/${u.id}`}>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-blue-600 hover:text-blue-700"
+                            title="عرض التفاصيل"
+                          >
+                            <Eye size={16} />
+                          </Button>
+                        </Link>
 
                         {u.kycStatus === "pending" && (
                           <>

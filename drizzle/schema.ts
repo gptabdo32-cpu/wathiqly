@@ -98,12 +98,17 @@ export const transactions = mysqlTable("transactions", {
   
   amount: decimal("amount", { precision: 15, scale: 2 }).notNull(),
   
-  // Reference to related transaction (e.g., escrow_id, withdrawal_id)
-  referenceType: varchar("referenceType", { length: 50 }),
-  referenceId: int("referenceId"),
-  
-  description: text("description"),
+  // Status of the transaction
   status: mysqlEnum("status", ["pending", "completed", "failed", "cancelled"]).default("pending").notNull(),
+  
+  // Related entities
+  escrowId: int("escrowId"),
+  productPurchaseId: int("productPurchaseId"),
+  withdrawalRequestId: int("withdrawalRequestId"),
+  
+  // Metadata
+  description: text("description"),
+  reference: varchar("reference", { length: 100 }), // Payment gateway reference
   
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -113,59 +118,45 @@ export type Transaction = typeof transactions.$inferSelect;
 export type InsertTransaction = typeof transactions.$inferInsert;
 
 /**
- * Escrow table - tracks all transactions between buyers and sellers
+ * Escrow table - core of the platform
  */
 export const escrows = mysqlTable("escrows", {
   id: int("id").autoincrement().primaryKey(),
   
-  // Parties involved
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  
   buyerId: int("buyerId").notNull(),
   sellerId: int("sellerId").notNull(),
   
-  // Transaction details
-  title: varchar("title", { length: 255 }).notNull(),
-  description: text("description"),
   amount: decimal("amount", { precision: 15, scale: 2 }).notNull(),
   
-  // Commission calculation
+  // Commission details
   commissionPercentage: decimal("commissionPercentage", { precision: 5, scale: 2 }).default("2.5").notNull(),
   commissionAmount: decimal("commissionAmount", { precision: 15, scale: 2 }).notNull(),
+  commissionPaidBy: mysqlEnum("commissionPaidBy", ["buyer", "seller", "split"]).default("buyer").notNull(),
   
-  // Payment method (Libyan methods)
-  paymentMethod: mysqlEnum("paymentMethod", [
-    "sadad", // سداد
-    "tadawul", // تداول
-    "edfaali", // إدفع لي
-    "bank_transfer", // تحويل بنكي
-  ]).notNull(),
-  
-  // Status tracking
+  // Status
   status: mysqlEnum("status", [
-    "pending", // Waiting for buyer to deposit
-    "funded", // Money deposited, waiting for delivery
-    "delivered", // Seller delivered, waiting for buyer confirmation
-    "completed", // Buyer confirmed, transaction complete
-    "cancelled", // Transaction cancelled
-    "disputed", // Dispute raised
-  ]).default("pending").notNull(),
+    "draft", // Not yet funded
+    "funded", // Buyer paid, money in escrow
+    "delivered", // Seller delivered, waiting for buyer approval
+    "completed", // Buyer approved, money released to seller
+    "disputed", // Something went wrong, admin intervention needed
+    "cancelled", // Cancelled and refunded
+  ]).default("draft").notNull(),
   
-  // Delivery tracking
-  deliveryProof: text("deliveryProof"), // CDN URL or JSON with proof details
+  // Dates
+  fundedAt: timestamp("fundedAt"),
   deliveredAt: timestamp("deliveredAt"),
-  
-  // Confirmation tracking
-  buyerConfirmedAt: timestamp("buyerConfirmedAt"),
   completedAt: timestamp("completedAt"),
   
-  // Dispute handling
-  disputeReason: text("disputeReason"),
-  disputeRaisedBy: int("disputeRaisedBy"), // userId
+  // Dispute info
   disputeRaisedAt: timestamp("disputeRaisedAt"),
+  disputeRaisedBy: int("disputeRaisedBy"),
+  disputeReason: text("disputeReason"),
   disputeResolution: text("disputeResolution"),
   disputeResolvedAt: timestamp("disputeResolvedAt"),
-  
-  // Metadata
-  metadata: json("metadata"), // Additional custom data
   
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -175,29 +166,24 @@ export type Escrow = typeof escrows.$inferSelect;
 export type InsertEscrow = typeof escrows.$inferInsert;
 
 /**
- * Digital Products table - for the digital marketplace
+ * Digital Products table
  */
 export const digitalProducts = mysqlTable("digitalProducts", {
   id: int("id").autoincrement().primaryKey(),
   
-  // Seller information
   sellerId: int("sellerId").notNull(),
   
-  // Product details
-  name: varchar("name", { length: 255 }).notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
   description: text("description"),
-  category: varchar("category", { length: 100 }).notNull(), // e.g., "game_codes", "design_services", "programming", "recharge_cards"
+  category: varchar("category", { length: 100 }).notNull(),
   
-  // Pricing
   price: decimal("price", { precision: 15, scale: 2 }).notNull(),
   
-  // Product image
-  image: text("image"), // CDN URL
+  // Product media
+  thumbnailUrl: text("thumbnailUrl"),
+  previewUrl: text("previewUrl"), // For samples/previews
   
-  // Inventory
-  quantity: int("quantity").notNull(), // -1 for unlimited
-  
-  // Product delivery method
+  // Delivery details
   deliveryType: mysqlEnum("deliveryType", [
     "instant", // Delivered immediately after purchase
     "manual", // Seller manually delivers
@@ -436,3 +422,31 @@ export const notifications = mysqlTable("notifications", {
 
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = typeof notifications.$inferInsert;
+
+/**
+ * Platform Settings table - stores global platform configuration
+ */
+export const platformSettings = mysqlTable("platformSettings", {
+  id: int("id").autoincrement().primaryKey(),
+  
+  // General platform settings
+  platformName: varchar("platformName", { length: 255 }).default("وثّقلي").notNull(),
+  platformDescription: text("platformDescription"),
+  contactEmail: varchar("contactEmail", { length: 320 }),
+  supportPhone: varchar("supportPhone", { length: 20 }),
+  
+  // Escrow & Commission settings
+  escrowCommissionPercentage: decimal("escrowCommissionPercentage", { precision: 5, scale: 2 }).default("2.5").notNull(),
+  productCommissionPercentage: decimal("productCommissionPercentage", { precision: 5, scale: 2 }).default("5.0").notNull(),
+  minWithdrawalAmount: decimal("minWithdrawalAmount", { precision: 15, scale: 2 }).default("10.0").notNull(),
+  
+  // Features toggles
+  isRegistrationEnabled: boolean("isRegistrationEnabled").default(true),
+  isEscrowEnabled: boolean("isEscrowEnabled").default(true),
+  isProductMarketplaceEnabled: boolean("isProductMarketplaceEnabled").default(true),
+  
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PlatformSettings = typeof platformSettings.$inferSelect;
+export type InsertPlatformSettings = typeof platformSettings.$inferInsert;

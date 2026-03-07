@@ -17,6 +17,12 @@ import {
   InsertWithdrawalRequest,
   trustedSellerSubscriptions,
   InsertTrustedSellerSubscription,
+  notifications,
+  InsertNotification,
+  platformSettings,
+  InsertPlatformSettings,
+  adminLogs,
+  InsertAdminLog,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -418,6 +424,112 @@ export async function getUserActiveTrustedSubscription(userId: number) {
     .limit(1);
 
   return result.length > 0 ? result[0] : undefined;
+}
+
+// ============ NOTIFICATION OPERATIONS ============
+
+export async function createNotification(notification: InsertNotification) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return await db.insert(notifications).values(notification);
+}
+
+export async function getUserNotifications(userId: number, limit: number = 50) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(notifications)
+    .where(eq(notifications.userId, userId))
+    .orderBy(desc(notifications.createdAt))
+    .limit(limit);
+}
+
+export async function markNotificationAsRead(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(notifications).set({ isRead: true }).where(eq(notifications.id, id));
+}
+
+export async function sendGlobalNotification(title: string, message: string, type: "system" | "marketing") {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const allUsers = await db.select({ id: users.id }).from(users);
+  
+  const notificationValues = allUsers.map(u => ({
+    userId: u.id,
+    title,
+    message,
+    type,
+    isRead: false
+  }));
+
+  // Insert in chunks to avoid large query issues
+  const chunkSize = 100;
+  for (let i = 0; i < notificationValues.length; i += chunkSize) {
+    const chunk = notificationValues.slice(i, i + chunkSize);
+    await db.insert(notifications).values(chunk);
+  }
+}
+
+// ============ PLATFORM SETTINGS OPERATIONS ============
+
+export async function getPlatformSettings() {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db.select().from(platformSettings).limit(1);
+  
+  if (result.length === 0) {
+    // Create default settings if not exists
+    await db.insert(platformSettings).values({
+      platformName: "وثّقلي",
+      escrowCommissionPercentage: "2.5",
+      productCommissionPercentage: "5.0",
+      minWithdrawalAmount: "10.0",
+    });
+    const newResult = await db.select().from(platformSettings).limit(1);
+    return newResult[0];
+  }
+  
+  return result[0];
+}
+
+export async function updatePlatformSettings(settings: Partial<InsertPlatformSettings>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const currentSettings = await getPlatformSettings();
+  if (!currentSettings) throw new Error("Could not initialize settings");
+
+  await db.update(platformSettings)
+    .set(settings)
+    .where(eq(platformSettings.id, currentSettings.id));
+}
+
+// ============ ADMIN LOG OPERATIONS ============
+
+export async function getAdminLogs(limit: number = 50, offset: number = 0) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(adminLogs)
+    .orderBy(desc(adminLogs.createdAt))
+    .limit(limit)
+    .offset(offset);
+}
+
+export async function createAdminLog(log: InsertAdminLog) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return await db.insert(adminLogs).values(log);
 }
 
 // Helper function to import or

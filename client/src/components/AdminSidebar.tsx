@@ -9,6 +9,10 @@ import {
   ChevronRight,
   Menu,
   X,
+  Bell,
+  History,
+  Package,
+  PieChart,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -34,6 +38,26 @@ const adminMenuItems = [
     label: "إدارة النزاعات",
     href: "/admin/disputes",
     icon: Gavel,
+  },
+  {
+    label: "إدارة التنبيهات",
+    href: "/admin/notifications",
+    icon: Bell,
+  },
+  {
+    label: "إدارة المنتجات",
+    href: "/admin/products",
+    icon: Package,
+  },
+  {
+    label: "العمولات والأرباح",
+    href: "/admin/commissions",
+    icon: PieChart,
+  },
+  {
+    label: "سجلات المسؤولين",
+    href: "/admin/logs",
+    icon: History,
   },
   {
     label: "الإعدادات",

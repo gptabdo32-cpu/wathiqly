@@ -2,7 +2,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
-import { Redirect } from "wouter";
+import { Redirect, Link } from "wouter";
 import {
   ShieldAlert,
   Users,
@@ -62,45 +62,53 @@ export default function AdminDashboard() {
 
         {/* Stats Grid */}
         <div className="grid md:grid-cols-4 gap-6 mb-8">
-          <Card className="p-6 border-r-4 border-r-blue-500">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-sm text-slate-500 mb-1">إجمالي الأموال المحجوزة</p>
-                <p className="text-2xl font-bold text-slate-900">{stats?.totalVolume || "0"} ل.د</p>
+          <Link href="/admin/commissions">
+            <Card className="p-6 border-r-4 border-r-blue-500 cursor-pointer hover:shadow-md transition-shadow">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-sm text-slate-500 mb-1">إجمالي الأموال المحجوزة</p>
+                  <p className="text-2xl font-bold text-slate-900">{stats?.totalVolume || "0"} ل.د</p>
+                </div>
+                <DollarSign className="w-8 h-8 text-blue-500 opacity-20" />
               </div>
-              <DollarSign className="w-8 h-8 text-blue-500 opacity-20" />
-            </div>
-          </Card>
+            </Card>
+          </Link>
 
-          <Card className="p-6 border-r-4 border-r-red-500">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-sm text-slate-500 mb-1">نزاعات نشطة</p>
-                <p className="text-2xl font-bold text-slate-900">{stats?.activeDisputes || "0"}</p>
+          <Link href="/admin/disputes">
+            <Card className="p-6 border-r-4 border-r-red-500 cursor-pointer hover:shadow-md transition-shadow">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-sm text-slate-500 mb-1">نزاعات نشطة</p>
+                  <p className="text-2xl font-bold text-slate-900">{stats?.activeDisputes || "0"}</p>
+                </div>
+                <Gavel className="w-8 h-8 text-red-500 opacity-20" />
               </div>
-              <Gavel className="w-8 h-8 text-red-500 opacity-20" />
-            </div>
-          </Card>
+            </Card>
+          </Link>
 
-          <Card className="p-6 border-r-4 border-r-green-500">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-sm text-slate-500 mb-1">إجمالي المستخدمين</p>
-                <p className="text-2xl font-bold text-slate-900">{stats?.totalUsers || "0"}</p>
+          <Link href="/admin/users">
+            <Card className="p-6 border-r-4 border-r-green-500 cursor-pointer hover:shadow-md transition-shadow">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-sm text-slate-500 mb-1">إجمالي المستخدمين</p>
+                  <p className="text-2xl font-bold text-slate-900">{stats?.totalUsers || "0"}</p>
+                </div>
+                <Users className="w-8 h-8 text-green-500 opacity-20" />
               </div>
-              <Users className="w-8 h-8 text-green-500 opacity-20" />
-            </div>
-          </Card>
+            </Card>
+          </Link>
 
-          <Card className="p-6 border-r-4 border-r-purple-500">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-sm text-slate-500 mb-1">إجمالي العمليات</p>
-                <p className="text-2xl font-bold text-slate-900">{stats?.totalTransactions || "0"}</p>
+          <Link href="/admin/transactions">
+            <Card className="p-6 border-r-4 border-r-purple-500 cursor-pointer hover:shadow-md transition-shadow">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-sm text-slate-500 mb-1">إجمالي العمليات</p>
+                  <p className="text-2xl font-bold text-slate-900">{stats?.totalTransactions || "0"}</p>
+                </div>
+                <ShieldAlert className="w-8 h-8 text-purple-500 opacity-20" />
               </div>
-              <ShieldAlert className="w-8 h-8 text-purple-500 opacity-20" />
-            </div>
-          </Card>
+            </Card>
+          </Link>
         </div>
 
         <div className="grid lg:grid-cols-3 gap-8">

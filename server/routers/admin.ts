@@ -7,12 +7,21 @@ import {
   resolveDispute,
   getSuspiciousActivities,
   getUserById,
+  getEscrowById,
   getAllUsers,
   updateUserKycStatus,
   updateUserStatus,
   getAllTransactions,
   updateEscrowStatus,
   createAdminLog,
+  createNotification,
+  sendGlobalNotification,
+  getPlatformSettings,
+  updatePlatformSettings,
+  getAdminLogs,
+  getAllDigitalProducts,
+  updateDigitalProductStatus,
+  getPlatformStats,
   db,
 } from "../db";
 import { users, adminLogs, escrows } from "../../drizzle/schema";
@@ -412,6 +421,319 @@ export const adminRouter = router({
       throw new TRPCError({
         code: "INTERNAL_SERVER_ERROR",
         message: "فشل الحصول على الأنشطة المشبوهة",
+      });
+    }
+  }),
+
+  /**
+   * الحصول على تفاصيل مستخدم محدد
+   */
+  getUser: protectedProcedure
+    .input(z.object({ userId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      if (ctx.user?.role !== "admin") {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "ليس لديك صلاحيات كافية",
+        });
+      }
+
+      try {
+        const user = await getUserById(input.userId);
+        if (!user) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "المستخدم غير موجود",
+          });
+        }
+        return user;
+      } catch (error) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "فشل الحصول على تفاصيل المستخدم",
+        });
+      }
+    }),
+
+  /**
+   * الحصول على تفاصيل معاملة محددة
+   */
+  getTransaction: protectedProcedure
+    .input(z.object({ transactionId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      if (ctx.user?.role !== "admin") {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "ليس لديك صلاحيات كافية",
+        });
+      }
+
+      try {
+        const transaction = await getEscrowById(input.transactionId);
+        if (!transaction) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "المعاملة غير موجودة",
+          });
+        }
+        return transaction;
+      } catch (error) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "فشل الحصول على تفاصيل المعاملة",
+        });
+      }
+    }),
+
+  /**
+   * إرسال تنبيه لمستخدم محدد
+   */
+  sendNotification: protectedProcedure
+    .input(
+      z.object({
+        userId: z.number(),
+        title: z.string().min(1),
+        message: z.string().min(1),
+        type: z.enum(["system", "marketing", "transaction", "dispute"]),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.user?.role !== "admin") {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "ليس لديك صلاحيات كافية",
+        });
+      }
+
+      try {
+        await createNotification({
+          userId: input.userId,
+          title: input.title,
+          message: input.message,
+          type: input.type as any,
+        });
+
+        await createAdminLog({
+          adminId: ctx.user.id,
+          action: "send_notification",
+          targetUserId: input.userId,
+          details: `تم إرسال تنبيه للمستخدم ${input.userId}: ${input.title}`,
+        });
+
+        return { success: true };
+      } catch (error) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "فشل إرسال التنبيه",
+        });
+      }
+    }),
+
+  /**
+   * إرسال تنبيه لجميع المستخدمين
+   */
+  sendGlobalNotification: protectedProcedure
+    .input(
+      z.object({
+        title: z.string().min(1),
+        message: z.string().min(1),
+        type: z.enum(["system", "marketing"]),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.user?.role !== "admin") {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "ليس لديك صلاحيات كافية",
+        });
+      }
+
+      try {
+        await sendGlobalNotification(input.title, input.message, input.type);
+
+        await createAdminLog({
+          adminId: ctx.user.id,
+          action: "send_global_notification",
+          targetUserId: 0, // System-wide
+          details: `تم إرسال تنبيه عام: ${input.title}`,
+        });
+
+        return { success: true };
+      } catch (error) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "فشل إرسال التنبيه العام",
+        });
+      }
+    }),
+
+  /**
+   * الحصول على إعدادات المنصة
+   */
+  getSettings: protectedProcedure.query(async ({ ctx }) => {
+    if (ctx.user?.role !== "admin") {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "ليس لديك صلاحيات كافية",
+      });
+    }
+
+    try {
+      return await getPlatformSettings();
+    } catch (error) {
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "فشل الحصول على الإعدادات",
+      });
+    }
+  }),
+
+  /**
+   * تحديث إعدادات المنصة
+   */
+  updateSettings: protectedProcedure
+    .input(
+      z.object({
+        platformName: z.string().optional(),
+        platformDescription: z.string().optional(),
+        contactEmail: z.string().email().optional(),
+        supportPhone: z.string().optional(),
+        escrowCommissionPercentage: z.string().optional(),
+        productCommissionPercentage: z.string().optional(),
+        minWithdrawalAmount: z.string().optional(),
+        isRegistrationEnabled: z.boolean().optional(),
+        isEscrowEnabled: z.boolean().optional(),
+        isProductMarketplaceEnabled: z.boolean().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.user?.role !== "admin") {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "ليس لديك صلاحيات كافية",
+        });
+      }
+
+      try {
+        await updatePlatformSettings(input);
+
+        await createAdminLog({
+          adminId: ctx.user.id,
+          action: "update_settings",
+          targetUserId: 0,
+          details: `تم تحديث إعدادات المنصة`,
+        });
+
+        return { success: true };
+      } catch (error) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "فشل تحديث الإعدادات",
+        });
+      }
+    }),
+
+  /**
+   * الحصول على سجلات المسؤولين
+   */
+  listLogs: protectedProcedure
+    .input(
+      z.object({
+        limit: z.number().min(1).max(100).default(50),
+        offset: z.number().min(0).default(0),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      if (ctx.user?.role !== "admin") {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "ليس لديك صلاحيات كافية",
+        });
+      }
+
+        try {
+        return await getAdminLogs(input.limit, input.offset);
+      } catch (error) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "فشل الحصول على سجلات المسؤولين",
+        });
+      }
+    }),
+
+  /**
+   * إدارة المنتجات الرقمية
+   */
+  listProducts: protectedProcedure
+    .input(z.object({ search: z.string().optional() }))
+    .query(async ({ ctx, input }) => {
+      if (ctx.user?.role !== "admin") {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "ليس لديك صلاحيات كافية",
+        });
+      }
+
+      try {
+        return await getAllDigitalProducts(input.search);
+      } catch (error) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "فشل الحصول على المنتجات",
+        });
+      }
+    }),
+
+  /**
+   * تفعيل أو تعطيل منتج
+   */
+  toggleProductStatus: protectedProcedure
+    .input(z.object({ productId: z.number(), isActive: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.user?.role !== "admin") {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "ليس لديك صلاحيات كافية",
+        });
+      }
+
+      try {
+        await updateDigitalProductStatus(input.productId, input.isActive);
+
+        await createAdminLog({
+          adminId: ctx.user.id,
+          action: input.isActive ? "activate_product" : "deactivate_product",
+          targetId: input.productId,
+          targetType: "product",
+          details: `تم ${input.isActive ? "تفعيل" : "تعطيل"} المنتج ${input.productId}`,
+        });
+
+        return { success: true };
+      } catch (error) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "فشل تحديث حالة المنتج",
+        });
+      }
+    }),
+
+  /**
+   * إحصائيات العمولات والأرباح
+   */
+  getCommissionStats: protectedProcedure.query(async ({ ctx }) => {
+    if (ctx.user?.role !== "admin") {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "ليس لديك صلاحيات كافية",
+      });
+    }
+
+    try {
+      return await getPlatformStats();
+    } catch (error) {
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "فشل الحصول على إحصائيات الأرباح",
       });
     }
   }),
