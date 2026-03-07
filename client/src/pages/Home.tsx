@@ -332,16 +332,16 @@ export default function Home() {
             <div>
               <h4 className="font-semibold mb-4 text-foreground">الروابط</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#" className="hover:text-foreground">الرئيسية</a></li>
-                <li><a href="#" className="hover:text-foreground">الميزات</a></li>
-                <li><a href="#" className="hover:text-foreground">الأسعار</a></li>
+                <li><Link href="/" className="hover:text-foreground">الرئيسية</Link></li>
+                <li><Link href="/faq" className="hover:text-foreground">الأسئلة الشائعة</Link></li>
+                <li><Link href="/products" className="hover:text-foreground">تصفح المنتجات</Link></li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold mb-4 text-foreground">القانوني</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#" className="hover:text-foreground">الشروط</a></li>
-                <li><a href="#" className="hover:text-foreground">الخصوصية</a></li>
+                <li><Link href="/terms" className="hover:text-foreground">الشروط والسياسات</Link></li>
+                <li><Link href="/terms" className="hover:text-foreground">سياسة الاسترجاع</Link></li>
               </ul>
             </div>
             <div>

@@ -25,6 +25,10 @@ import {
   createTransaction,
   getUserTransactions,
   getWalletByUserId,
+  getAdminStats,
+  getAllDisputes,
+  resolveDispute,
+  getSuspiciousActivities,
 } from "./db";
 import { TRPCError } from "@trpc/server";
 
@@ -147,6 +151,46 @@ export const appRouter = router({
       .query(async ({ ctx, input }) => {
         return await getUserWithdrawals(ctx.user.id, input.limit, input.offset);
       }),
+  }),
+
+  // ============ ADMIN OPERATIONS ============
+  admin: router({
+    getStats: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+      }
+      return await getAdminStats();
+    }),
+
+    listDisputes: protectedProcedure
+      .input(z.object({ limit: z.number().default(50), offset: z.number().default(0) }))
+      .query(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        }
+        return await getAllDisputes(input.limit, input.offset);
+      }),
+
+    resolveDispute: protectedProcedure
+      .input(z.object({ 
+        escrowId: z.number(), 
+        resolution: z.string(), 
+        status: z.enum(["completed", "cancelled"]) 
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+        }
+        await resolveDispute(input.escrowId, input.resolution, input.status);
+        return { success: true };
+      }),
+
+    getSuspiciousActivities: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
+      }
+      return await getSuspiciousActivities();
+    }),
   }),
 
   // ============ ESCROW OPERATIONS ============

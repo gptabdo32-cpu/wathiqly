@@ -323,6 +323,81 @@ export async function getPendingWithdrawals(limit: number = 50, offset: number =
     .offset(offset);
 }
 
+// ============ ADMIN OPERATIONS ============
+
+export async function getAdminStats() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // Get total escrow volume (funded, delivered, completed, disputed)
+  const allEscrows = await db.select().from(escrows);
+  const totalVolume = allEscrows
+    .filter(e => ["funded", "delivered", "completed", "disputed"].includes(e.status))
+    .reduce((sum, e) => sum + parseFloat(e.amount), 0);
+
+  const activeDisputes = allEscrows.filter(e => e.status === "disputed").length;
+  
+  const totalUsers = (await db.select().from(users)).length;
+  
+  return {
+    totalVolume: totalVolume.toFixed(2),
+    activeDisputes,
+    totalUsers,
+    totalTransactions: allEscrows.length
+  };
+}
+
+export async function getAllDisputes(limit: number = 50, offset: number = 0) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(escrows)
+    .where(eq(escrows.status, "disputed"))
+    .orderBy(desc(escrows.disputeRaisedAt))
+    .limit(limit)
+    .offset(offset);
+}
+
+export async function resolveDispute(escrowId: number, resolution: string, status: "completed" | "cancelled") {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.update(escrows)
+    .set({ 
+      status, 
+      disputeResolution: resolution,
+      disputeResolvedAt: new Date()
+    })
+    .where(eq(escrows.id, escrowId));
+}
+
+export async function getSuspiciousActivities() {
+  const db = await getDb();
+  if (!db) return [];
+
+  // Simple heuristic: users who created many escrows in a short time
+  const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
+  
+  const recentEscrows = await db.select().from(escrows).where(gte(escrows.createdAt, oneMinuteAgo));
+  
+  const userCounts: Record<number, number> = {};
+  recentEscrows.forEach(e => {
+    userCounts[e.buyerId] = (userCounts[e.buyerId] || 0) + 1;
+  });
+
+  const suspiciousUsers = Object.entries(userCounts)
+    .filter(([_, count]) => count >= 5) // Threshold: 5+ requests per minute
+    .map(([userId, count]) => ({
+      userId: parseInt(userId),
+      count,
+      reason: "High frequency of escrow creation (5+ per minute)"
+    }));
+
+  return suspiciousUsers;
+}
+
 // ============ TRUSTED SELLER OPERATIONS ============
 
 export async function createTrustedSellerSubscription(subscription: InsertTrustedSellerSubscription) {
