@@ -136,6 +136,15 @@ export const escrows = mysqlTable("escrows", {
   commissionAmount: decimal("commissionAmount", { precision: 15, scale: 2 }).notNull(),
   commissionPaidBy: mysqlEnum("commissionPaidBy", ["buyer", "seller", "split"]).default("buyer").notNull(),
   
+  // Deal Type
+  dealType: mysqlEnum("dealType", ["physical", "digital_account", "service"]).default("physical").notNull(),
+  
+  // Dynamic specifications based on deal type (JSON)
+  // Physical: { shippingCompany, trackingNumber, inspectionPeriod }
+  // Digital: { accountType, followersCount, linkedEmail, verificationPeriod }
+  // Service: { description, deliveryPeriod, milestones: [] }
+  specifications: json("specifications"),
+
   // Status
   status: mysqlEnum("status", [
     "draft", // Not yet funded

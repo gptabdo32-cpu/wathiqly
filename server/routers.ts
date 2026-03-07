@@ -205,6 +205,8 @@ export const appRouter = router({
           amount: z.string().refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) > 0, { message: "Amount must be a positive number" }),
           paymentMethod: z.enum(["sadad", "tadawul", "edfaali", "bank_transfer"]),
           commissionPercentage: z.string().refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) >= 0 && parseFloat(val) <= 100, { message: "Commission percentage must be between 0 and 100" }).default("2.5"),
+          dealType: z.enum(["physical", "digital_account", "service"]).default("physical"),
+          specifications: z.record(z.string(), z.any()).optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -232,6 +234,8 @@ export const appRouter = router({
           commissionPercentage: input.commissionPercentage,
           commissionAmount,
           paymentMethod: input.paymentMethod,
+          dealType: input.dealType,
+          specifications: input.specifications,
           status: "pending",
         });
 
