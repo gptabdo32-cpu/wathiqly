@@ -155,8 +155,77 @@ export const featureSettings = mysqlTable("featureSettings", {
     "split",       // Split between parties
   ]).default("platform").notNull(),
   
+  // Inspection Service settings
+  inspectionServiceEnabled: boolean("inspectionServiceEnabled").default(true),
+  inspectionDefaultFee: decimal("inspectionDefaultFee", { precision: 15, scale: 2 }).default("20.0").notNull(), // Fee in LYD
+  
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
 export type FeatureSettings = typeof featureSettings.$inferSelect;
 export type InsertFeatureSettings = typeof featureSettings.$inferInsert;
+
+/**
+ * Inspection Reports table - for "خدمة المعاينة الميدانية الموثقة" feature
+ * Stores detailed inspection reports for physical goods
+ */
+export const inspectionReports = mysqlTable("inspectionReports", {
+  id: int("id").autoincrement().primaryKey(),
+  
+  // Related escrow or timed link
+  escrowId: int("escrowId"),
+  timedLinkId: int("timedLinkId"),
+  
+  // Inspector details
+  inspectorId: int("inspectorId").notNull(), // User ID of the inspector/agent
+  
+  // Report content
+  summary: text("summary").notNull(), // Overall summary of condition
+  conditionScore: int("conditionScore").default(0), // 1-10 scale
+  
+  // Detailed findings (JSON)
+  // { exterior: string, interior: string, functional: string, defects: string[] }
+  findings: json("findings"),
+  
+  // Media evidence (JSON array of URLs)
+  mediaUrls: json("mediaUrls"),
+  
+  // Verification details
+  isVerified: boolean("isVerified").default(false),
+  verifiedAt: timestamp("verifiedAt"),
+  
+  // Status
+  status: mysqlEnum("status", [
+    "pending",    // Inspector assigned, waiting for inspection
+    "completed",  // Inspection done, report submitted
+    "approved",   // Buyer approved the report
+    "rejected",   // Buyer rejected the report
+  ]).default("pending").notNull(),
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type InspectionReport = typeof inspectionReports.$inferSelect;
+export type InsertInspectionReport = typeof inspectionReports.$inferInsert;
+
+/**
+ * Inspection Agents table - stores verified inspection points or individuals
+ */
+export const inspectionAgents = mysqlTable("inspectionAgents", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),
+  
+  agentName: varchar("agentName", { length: 255 }).notNull(),
+  location: varchar("location", { length: 255 }), // City/Area
+  specialties: json("specialties"), // e.g., ["cars", "electronics", "real_estate"]
+  
+  isAvailable: boolean("isAvailable").default(true),
+  rating: decimal("rating", { precision: 3, scale: 2 }).default("0"),
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type InspectionAgent = typeof inspectionAgents.$inferSelect;
+export type InsertInspectionAgent = typeof inspectionAgents.$inferInsert;

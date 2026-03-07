@@ -9,6 +9,10 @@ import {
   InsertDisputeCollateralWallet,
   featureSettings,
   InsertFeatureSettings,
+  inspectionReports,
+  InsertInspectionReport,
+  inspectionAgents,
+  InsertInspectionAgent,
 } from "../drizzle/schema_new_features";
 import { ENV } from "./_core/env";
 import { v4 as uuidv4 } from "uuid";
@@ -328,6 +332,8 @@ export async function getFeatureSettings() {
       disputeCollateralAmount: "5.0",
       disputeCollateralPercentage: "0",
       disputeCollateralForfeitedTo: "platform",
+      inspectionServiceEnabled: true,
+      inspectionDefaultFee: "20.0",
     });
 
     settings = await db.select().from(featureSettings).limit(1);
@@ -354,4 +360,103 @@ export async function updateFeatureSettings(
     .where(eq(featureSettings.id, settings.id));
 
   return { success: true };
+}
+
+// ============ INSPECTION SERVICE OPERATIONS ============
+
+/**
+ * Create a new inspection report
+ */
+export async function createInspectionReport(report: InsertInspectionReport) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(inspectionReports).values(report);
+  return result;
+}
+
+/**
+ * Get inspection report by ID
+ */
+export async function getInspectionReportById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db
+    .select()
+    .from(inspectionReports)
+    .where(eq(inspectionReports.id, id))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : undefined;
+}
+
+/**
+ * Get inspection report by escrow ID
+ */
+export async function getInspectionReportByEscrowId(escrowId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db
+    .select()
+    .from(inspectionReports)
+    .where(eq(inspectionReports.escrowId, escrowId))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : undefined;
+}
+
+/**
+ * Update inspection report status
+ */
+export async function updateInspectionReportStatus(
+  reportId: number,
+  status: string,
+  isVerified: boolean = false
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const updateData: any = { status };
+  if (isVerified) {
+    updateData.isVerified = true;
+    updateData.verifiedAt = new Date();
+  }
+
+  await db
+    .update(inspectionReports)
+    .set(updateData)
+    .where(eq(inspectionReports.id, reportId));
+
+  return { success: true };
+}
+
+/**
+ * Get all inspection agents
+ */
+export async function getAllInspectionAgents() {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(inspectionAgents)
+    .where(eq(inspectionAgents.isAvailable, true));
+}
+
+/**
+ * Get inspection agent by user ID
+ */
+export async function getInspectionAgentByUserId(userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db
+    .select()
+    .from(inspectionAgents)
+    .where(eq(inspectionAgents.userId, userId))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : undefined;
 }
