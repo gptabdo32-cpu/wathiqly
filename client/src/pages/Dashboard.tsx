@@ -18,6 +18,8 @@ import {
 import { TrustBadge } from "@/components/TrustBadge";
 import { PrivacyToggle } from "@/components/PrivacyToggle";
 import { TransactionStepper } from "@/components/TransactionStepper";
+// TODO: For more complex global state management (e.g., notifications, user preferences across many components),
+// consider libraries like Zustand or Jotai if React Context/useState becomes unwieldy.
 
 export default function Dashboard() {
   const { user, isAuthenticated, loading } = useAuth();

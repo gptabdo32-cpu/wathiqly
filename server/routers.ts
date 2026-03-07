@@ -106,9 +106,9 @@ export const appRouter = router({
     requestWithdrawal: protectedProcedure
       .input(
         z.object({
-          amount: z.string(),
+          amount: z.string().refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) > 0, { message: "Amount must be a positive number" }),
           paymentMethod: z.enum(["sadad", "tadawul", "edfaali", "bank_transfer"]),
-          paymentDetails: z.record(z.string(), z.any()),
+          paymentDetails: z.record(z.string(), z.any()), // TODO: Implement encryption for sensitive payment details before storing in production
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -157,9 +157,9 @@ export const appRouter = router({
           sellerId: z.number(),
           title: z.string(),
           description: z.string().optional(),
-          amount: z.string(),
+          amount: z.string().refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) > 0, { message: "Amount must be a positive number" }),
           paymentMethod: z.enum(["sadad", "tadawul", "edfaali", "bank_transfer"]),
-          commissionPercentage: z.string().default("2.5"),
+          commissionPercentage: z.string().refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) >= 0 && parseFloat(val) <= 100, { message: "Commission percentage must be between 0 and 100" }).default("2.5"),
         })
       )
       .mutation(async ({ ctx, input }) => {
