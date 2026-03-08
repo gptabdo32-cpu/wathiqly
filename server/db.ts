@@ -23,6 +23,16 @@ import {
   InsertPlatformSettings,
   adminLogs,
   InsertAdminLog,
+  chatConversations,
+  InsertChatConversation,
+  chatMessages,
+  InsertChatMessage,
+  chatMessageReactions,
+  InsertChatMessageReaction,
+  chatReadReceipts,
+  InsertChatReadReceipt,
+  chatAttachments,
+  InsertChatAttachment,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -545,4 +555,88 @@ export async function updateUserProfile(userId: number, updates: Partial<InsertU
     .update(users)
     .set(updates)
     .where(eq(users.id, userId));
+}
+
+
+// ============ CHAT OPERATIONS ============
+
+export async function createConversation(data: InsertChatConversation) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return await db.insert(chatConversations).values(data);
+}
+
+export async function getConversation(conversationId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return await db.select().from(chatConversations).where(eq(chatConversations.id, conversationId)).limit(1);
+}
+
+export async function getUserConversations(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return await db.select().from(chatConversations).where(
+    or(
+      eq(chatConversations.buyerId, userId),
+      eq(chatConversations.sellerId, userId)
+    )
+  );
+}
+
+export async function createMessage(data: InsertChatMessage) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return await db.insert(chatMessages).values(data);
+}
+
+export async function getConversationMessages(conversationId: number, limit = 50, offset = 0) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return await db.select().from(chatMessages)
+    .where(eq(chatMessages.conversationId, conversationId))
+    .orderBy(desc(chatMessages.createdAt))
+    .limit(limit)
+    .offset(offset);
+}
+
+export async function markMessageAsRead(messageId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return await db.insert(chatReadReceipts).values({
+    messageId,
+    userId,
+  });
+}
+
+export async function deleteMessage(messageId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return await db.update(chatMessages)
+    .set({ isDeleted: true, deletedAt: new Date() })
+    .where(eq(chatMessages.id, messageId));
+}
+
+export async function addMessageReaction(messageId: number, userId: number, reaction: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return await db.insert(chatMessageReactions).values({
+    messageId,
+    userId,
+    reaction,
+  });
+}
+
+export async function uploadAttachment(data: InsertChatAttachment) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return await db.insert(chatAttachments).values(data);
 }

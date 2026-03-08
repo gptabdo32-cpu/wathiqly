@@ -28,6 +28,7 @@ import {
   updateUserProfile,
 } from "./db";
 import { adminRouter } from "./routers/admin";
+import { chatRouter } from "./routers/chat";
 import { eq } from "drizzle-orm";
 import { desc } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
@@ -505,6 +506,9 @@ export const appRouter = router({
       return await getUserActiveTrustedSubscription(ctx.user.id);
     }),
   }),
+
+  // ============ CHAT OPERATIONS ============
+  chat: chatRouter,
 });
 
 export type AppRouter = typeof appRouter;

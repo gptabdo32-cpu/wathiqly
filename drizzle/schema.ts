@@ -459,3 +459,91 @@ export const platformSettings = mysqlTable("platformSettings", {
 
 export type PlatformSettings = typeof platformSettings.$inferSelect;
 export type InsertPlatformSettings = typeof platformSettings.$inferInsert;
+
+
+/**
+ * Chat Conversations table - stores conversations between buyers and sellers
+ */
+export const chatConversations = mysqlTable("chatConversations", {
+  id: int("id").autoincrement().primaryKey(),
+  escrowId: int("escrowId").notNull(), // Link to the transaction/escrow
+  buyerId: int("buyerId").notNull(),
+  sellerId: int("sellerId").notNull(),
+  subject: varchar("subject", { length: 255 }).notNull(),
+  isActive: boolean("isActive").default(true),
+  lastMessageAt: timestamp("lastMessageAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ChatConversation = typeof chatConversations.$inferSelect;
+export type InsertChatConversation = typeof chatConversations.$inferInsert;
+
+/**
+ * Chat Messages table - stores individual messages in conversations
+ */
+export const chatMessages = mysqlTable("chatMessages", {
+  id: int("id").autoincrement().primaryKey(),
+  conversationId: int("conversationId").notNull(),
+  senderId: int("senderId").notNull(),
+  messageType: mysqlEnum("messageType", ["text", "image", "audio", "file"]).default("text").notNull(),
+  content: text("content"), // Text content or URL for media
+  mediaUrl: text("mediaUrl"), // URL for images, audio, files
+  mediaType: varchar("mediaType", { length: 50 }), // e.g., "image/jpeg", "audio/mp3"
+  mediaDuration: int("mediaDuration"), // Duration in seconds for audio
+  isEdited: boolean("isEdited").default(false),
+  editedAt: timestamp("editedAt"),
+  isDeleted: boolean("isDeleted").default(false),
+  deletedAt: timestamp("deletedAt"),
+  isEncrypted: boolean("isEncrypted").default(false), // For sensitive messages
+  encryptionKey: text("encryptionKey"), // Encrypted key for sensitive messages
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ChatMessage = typeof chatMessages.$inferSelect;
+export type InsertChatMessage = typeof chatMessages.$inferInsert;
+
+/**
+ * Chat Message Reactions table - stores reactions/emojis on messages
+ */
+export const chatMessageReactions = mysqlTable("chatMessageReactions", {
+  id: int("id").autoincrement().primaryKey(),
+  messageId: int("messageId").notNull(),
+  userId: int("userId").notNull(),
+  reaction: varchar("reaction", { length: 50 }).notNull(), // e.g., "👍", "❤️", "😂"
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ChatMessageReaction = typeof chatMessageReactions.$inferSelect;
+export type InsertChatMessageReaction = typeof chatMessageReactions.$inferInsert;
+
+/**
+ * Chat Read Receipts table - tracks which messages have been read
+ */
+export const chatReadReceipts = mysqlTable("chatReadReceipts", {
+  id: int("id").autoincrement().primaryKey(),
+  messageId: int("messageId").notNull(),
+  userId: int("userId").notNull(),
+  readAt: timestamp("readAt").defaultNow().notNull(),
+});
+
+export type ChatReadReceipt = typeof chatReadReceipts.$inferSelect;
+export type InsertChatReadReceipt = typeof chatReadReceipts.$inferInsert;
+
+/**
+ * Chat Attachments Metadata table - stores metadata for attachments
+ */
+export const chatAttachments = mysqlTable("chatAttachments", {
+  id: int("id").autoincrement().primaryKey(),
+  messageId: int("messageId").notNull(),
+  fileName: varchar("fileName", { length: 255 }).notNull(),
+  fileSize: int("fileSize").notNull(), // Size in bytes
+  fileUrl: text("fileUrl").notNull(),
+  fileType: varchar("fileType", { length: 50 }).notNull(), // e.g., "image", "audio", "document"
+  mimeType: varchar("mimeType", { length: 100 }).notNull(),
+  uploadedBy: int("uploadedBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ChatAttachment = typeof chatAttachments.$inferSelect;
+export type InsertChatAttachment = typeof chatAttachments.$inferInsert;

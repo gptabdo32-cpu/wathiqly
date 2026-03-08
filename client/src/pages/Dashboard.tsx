@@ -14,6 +14,7 @@ import {
   CheckCircle,
   AlertCircle,
   ShieldCheck,
+  MessageSquare,
 } from "lucide-react";
 import { TrustBadge } from "@/components/TrustBadge";
 import { PrivacyToggle } from "@/components/PrivacyToggle";
@@ -88,7 +89,7 @@ export default function Dashboard() {
         )}
 
         {/* Quick Actions */}
-        <div className="grid md:grid-cols-3 gap-4 mb-8">
+        <div className="grid md:grid-cols-4 gap-4 mb-8">
           {user?.userType !== "buyer" && (
             <Button asChild className="h-auto flex-col items-start p-4 bg-blue-600 hover:bg-blue-700 shadow-lg transition-all hover:-translate-y-1">
               <Link href="/create-transaction">
@@ -107,6 +108,13 @@ export default function Dashboard() {
               </Link>
             </Button>
           )}
+          <Button asChild variant="outline" className="h-auto flex-col items-start p-4 border-2 hover:border-purple-500 transition-all hover:-translate-y-1">
+            <Link href="/messaging">
+              <MessageSquare className="w-5 h-5 mb-2 text-purple-600" />
+              <span className="font-bold">الدردشات</span>
+              <span className="text-[10px] text-muted-foreground">تواصل آمن وموثق</span>
+            </Link>
+          </Button>
           <Button asChild variant="outline" className="h-auto flex-col items-start p-4 border-2 hover:border-slate-500 transition-all hover:-translate-y-1">
             <Link href="/profile">
               <BarChart3 className="w-5 h-5 mb-2 text-slate-600" />
