@@ -208,7 +208,7 @@ export const disputeCollateralRouter = router({
    * - Refund if dispute was won by the payer
    * - Forfeit if dispute was won by the other party
    */
-  resolveCollateral: protectedProcedure
+  resolveCollateral: adminProcedure
     .input(
       z.object({
         collateralId: z.number(),
@@ -217,13 +217,6 @@ export const disputeCollateralRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // Check if user is admin
-      if (ctx.user.role !== "admin") {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "Only admins can resolve collaterals",
-        });
-      }
 
       // Get collateral
       const collateral = await getDisputeCollateralByEscrowId(

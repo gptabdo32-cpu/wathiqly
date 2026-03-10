@@ -151,12 +151,14 @@ export const timedLinksRouter = router({
         });
       }
 
-      // Security Check: If the link is private/used, only the seller or the buyer who used it can see details
-      if (link.status === "used" && link.usedBy !== ctx.user.id && link.createdBy !== ctx.user.id) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "You don't have permission to view this used link",
-        });
+      // Security Check: If the link is used, only the seller or the buyer who used it can see details
+      if (link.status === "used") {
+        if (!ctx.user || (link.usedBy !== ctx.user.id && link.createdBy !== ctx.user.id)) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "You don't have permission to view this used link",
+          });
+        }
       }
 
       // Get seller info
