@@ -437,7 +437,7 @@ export const appRouter = router({
       .input(
         z.object({
           escrowId: z.number(),
-          reason: z.string(),
+          reason: z.string().min(10, "Reason must be at least 10 characters").max(1000, "Reason too long"),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -455,6 +455,15 @@ export const appRouter = router({
           throw new TRPCError({
             code: "FORBIDDEN",
             message: "You don't have access to this transaction",
+          });
+        }
+
+        // Security check: Only allow disputes for funded or delivered transactions
+        const allowedStatuses = ["funded", "delivered"];
+        if (!allowedStatuses.includes(escrow.status)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Cannot raise a dispute for a transaction in ${escrow.status} status. It must be funded or delivered.`,
           });
         }
 
