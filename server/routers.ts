@@ -125,29 +125,69 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
-        const wallet = await getOrCreateWallet(ctx.user.id);
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
 
-        // Validate balance
-        const availableBalance = parseFloat(wallet.balance);
-        const requestedAmount = parseFloat(input.amount);
+        try {
+          return await db.transaction(async (tx) => {
+            // Get wallet with lock if possible (Drizzle doesn't support FOR UPDATE easily in all dialects, but transaction helps)
+            const [wallet] = await tx.select().from(wallets).where(eq(wallets.userId, ctx.user.id)).limit(1);
+            
+            if (!wallet) {
+              throw new TRPCError({ code: "NOT_FOUND", message: "Wallet not found" });
+            }
 
-        if (requestedAmount > availableBalance) {
+            // Validate balance
+            const availableBalance = parseFloat(wallet.balance);
+            const requestedAmount = parseFloat(input.amount);
+
+            if (requestedAmount > availableBalance) {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: "Insufficient balance",
+              });
+            }
+
+            // 1. Deduct from balance and move to pending
+            const newBalance = (availableBalance - requestedAmount).toFixed(2);
+            const newPendingBalance = (parseFloat(wallet.pendingBalance) + requestedAmount).toFixed(2);
+
+            await tx.update(wallets)
+              .set({ 
+                balance: newBalance, 
+                pendingBalance: newPendingBalance,
+                updatedAt: new Date() 
+              })
+              .where(eq(wallets.id, wallet.id));
+
+            // 2. Create withdrawal request
+            const [result] = await tx.insert(withdrawalRequests).values({
+              userId: ctx.user.id,
+              amount: input.amount,
+              paymentMethod: input.paymentMethod,
+              paymentDetails: encryptData(JSON.stringify(input.paymentDetails)),
+              status: "pending",
+            });
+
+            // 3. Create transaction record
+            await tx.insert(transactions).values({
+              userId: ctx.user.id,
+              type: "withdrawal",
+              amount: input.amount,
+              status: "pending",
+              withdrawalRequestId: result.insertId,
+              description: `Withdrawal request via ${input.paymentMethod}`,
+            } as any);
+
+            return { success: true, withdrawalId: result.insertId };
+          });
+        } catch (error) {
+          if (error instanceof TRPCError) throw error;
           throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Insufficient balance",
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to process withdrawal request",
           });
         }
-
-        // Create withdrawal request
-        const result = await createWithdrawalRequest({
-          userId: ctx.user.id,
-          amount: input.amount,
-          paymentMethod: input.paymentMethod,
-          paymentDetails: encryptData(JSON.stringify(input.paymentDetails)),
-          status: "pending",
-        });
-
-        return { success: true, withdrawalId: result[0].insertId };
       }),
 
     getWithdrawalHistory: protectedProcedure
