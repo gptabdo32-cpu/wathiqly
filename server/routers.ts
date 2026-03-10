@@ -332,17 +332,21 @@ export const appRouter = router({
               });
             }
 
-            // Update escrow status to funded
-            await tx.update(escrows).set({ status: "funded", fundedAt: new Date() }).where(eq(escrows.id, input.escrowId));
+            // Security: Change status to 'pending_verification' instead of 'funded' immediately
+            // This allows admins to verify the transaction proof before the escrow is considered funded.
+            await tx.update(escrows).set({ 
+              status: "pending_verification", 
+              updatedAt: new Date() 
+            }).where(eq(escrows.id, input.escrowId));
 
-            // Create transaction record
+            // Create transaction record as pending
             await tx.insert(transactions).values({
               userId: ctx.user.id,
               type: "deposit",
               amount: escrow.amount,
-              status: "completed",
+              status: "pending",
               escrowId: input.escrowId,
-              description: `Escrow deposit for transaction ${input.escrowId}`,
+              description: `Escrow deposit proof submitted for transaction ${input.escrowId}`,
               reference: input.transactionProof,
             } as any);
 
