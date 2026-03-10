@@ -1,4 +1,4 @@
-import { router, protectedProcedure } from "../_core/trpc";
+import { router, protectedProcedure, adminProcedure } from "../_core/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
@@ -331,14 +331,7 @@ export const inspectionServiceRouter = router({
   /**
    * Get inspection statistics (admin)
    */
-  getStats: protectedProcedure.query(async ({ ctx }) => {
-    if (ctx.user.role !== "admin") {
-      throw new TRPCError({
-        code: "FORBIDDEN",
-        message: "Admin access required",
-      });
-    }
-
+  getStats: adminProcedure.query(async ({ ctx }) => {
     // TODO: Implement admin stats for inspections
     return {
       totalInspections: 0,
