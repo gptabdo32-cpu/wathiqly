@@ -33,6 +33,19 @@ async function startServer() {
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+  // Simple CSRF protection: check for custom header on non-GET requests
+  app.use((req, res, next) => {
+    const protectedMethods = ["POST", "PUT", "DELETE", "PATCH"];
+    if (protectedMethods.includes(req.method)) {
+      const csrfHeader = req.headers["x-trpc-source"] || req.headers["x-requested-with"];
+      if (!csrfHeader) {
+        return res.status(403).json({ error: "CSRF protection: Missing required header" });
+      }
+    }
+    next();
+  });
+
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
   // tRPC API
