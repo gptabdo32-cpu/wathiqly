@@ -127,11 +127,12 @@ export const inspectionServiceRouter = router({
         return null;
       }
 
-      // Verify user is part of the escrow or the assigned inspector
+      // Verify user is part of the escrow or the assigned inspector or admin
       if (
         escrow.buyerId !== ctx.user.id &&
         escrow.sellerId !== ctx.user.id &&
-        report.inspectorId !== ctx.user.id
+        report.inspectorId !== ctx.user.id &&
+        ctx.user.role !== "admin"
       ) {
         throw new TRPCError({
           code: "FORBIDDEN",
