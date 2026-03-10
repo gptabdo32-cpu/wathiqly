@@ -1,4 +1,4 @@
-import { eq, and, desc, gte, lte } from "drizzle-orm";
+import { eq, and, desc, gte, lte, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -48,6 +48,11 @@ export async function getDb() {
     }
   }
   return _db;
+}
+
+function handleDbError(error: unknown, message: string): never {
+  console.error(`[Database] ${message}:`, error);
+  throw new Error("Database operation failed.");
 }
 
 // ============ USER OPERATIONS ============
@@ -106,8 +111,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       set: updateSet,
     });
   } catch (error) {
-    console.error("[Database] Failed to upsert user:", error);
-    throw error;
+    handleDbError(error, "Failed to upsert user");
   }
 }
 
@@ -167,8 +171,12 @@ export async function createTransaction(transaction: InsertTransaction) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  const result = await db.insert(transactions).values(transaction);
-  return result;
+  try {
+    const result = await db.insert(transactions).values(transaction);
+    return result;
+  } catch (error) {
+    handleDbError(error, "Failed to create transaction");
+  }
 }
 
 export async function getUserTransactions(userId: number, limit: number = 50, offset: number = 0) {
@@ -190,8 +198,12 @@ export async function createEscrow(escrow: InsertEscrow) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  const result = await db.insert(escrows).values(escrow);
-  return result;
+  try {
+    const result = await db.insert(escrows).values(escrow);
+    return result;
+  } catch (error) {
+    handleDbError(error, "Failed to create escrow");
+  }
 }
 
 export async function getEscrowById(id: number) {
@@ -224,7 +236,11 @@ export async function updateEscrowStatus(id: number, status: string) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  await db.update(escrows).set({ status: status as any }).where(eq(escrows.id, id));
+  try {
+    await db.update(escrows).set({ status: status as any }).where(eq(escrows.id, id));
+  } catch (error) {
+    handleDbError(error, "Failed to update escrow status");
+  }
 }
 
 // ============ DIGITAL PRODUCT OPERATIONS ============
@@ -233,8 +249,12 @@ export async function createDigitalProduct(product: InsertDigitalProduct) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  const result = await db.insert(digitalProducts).values(product);
-  return result;
+  try {
+    const result = await db.insert(digitalProducts).values(product);
+    return result;
+  } catch (error) {
+    handleDbError(error, "Failed to create digital product");
+  }
 }
 
 export async function getDigitalProductById(id: number) {
@@ -288,7 +308,11 @@ export async function createReview(review: InsertReview) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  return await db.insert(reviews).values(review);
+  try {
+    return await db.insert(reviews).values(review);
+  } catch (error) {
+    handleDbError(error, "Failed to create review");
+  }
 }
 
 export async function getUserReviews(userId: number, limit: number = 50, offset: number = 0) {
@@ -310,7 +334,11 @@ export async function createWithdrawalRequest(request: InsertWithdrawalRequest) 
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  return await db.insert(withdrawalRequests).values(request);
+  try {
+    return await db.insert(withdrawalRequests).values(request);
+  } catch (error) {
+    handleDbError(error, "Failed to create withdrawal request");
+  }
 }
 
 export async function getUserWithdrawals(userId: number, limit: number = 50, offset: number = 0) {
@@ -363,64 +391,28 @@ export async function getAdminStats() {
   };
 }
 
-export async function getAllDisputes(limit: number = 50, offset: number = 0) {
-  const db = await getDb();
-  if (!db) return [];
-
-  return await db
-    .select()
-    .from(escrows)
-    .where(eq(escrows.status, "disputed"))
-    .orderBy(desc(escrows.disputeRaisedAt))
-    .limit(limit)
-    .offset(offset);
-}
-
-export async function resolveDispute(escrowId: number, resolution: string, status: "completed" | "cancelled") {
+export async function updateUserProfile(id: number, profile: Partial<InsertUser>) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  await db.update(escrows)
-    .set({ 
-      status, 
-      disputeResolution: resolution,
-      disputeResolvedAt: new Date()
-    })
-    .where(eq(escrows.id, escrowId));
+  try {
+    await db.update(users).set(profile).where(eq(users.id, id));
+  } catch (error) {
+    handleDbError(error, "Failed to update user profile");
+  }
 }
 
-export async function getSuspiciousActivities() {
-  const db = await getDb();
-  if (!db) return [];
-
-  // Simple heuristic: users who created many escrows in a short time
-  const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
-  
-  const recentEscrows = await db.select().from(escrows).where(gte(escrows.createdAt, oneMinuteAgo));
-  
-  const userCounts: Record<number, number> = {};
-  recentEscrows.forEach(e => {
-    userCounts[e.buyerId] = (userCounts[e.buyerId] || 0) + 1;
-  });
-
-  const suspiciousUsers = Object.entries(userCounts)
-    .filter(([_, count]) => count >= 5) // Threshold: 5+ requests per minute
-    .map(([userId, count]) => ({
-      userId: parseInt(userId),
-      count,
-      reason: "High frequency of escrow creation (5+ per minute)"
-    }));
-
-  return suspiciousUsers;
-}
-
-// ============ TRUSTED SELLER OPERATIONS ============
+// ============ TRUSTED SELLER SUBSCRIPTION ============
 
 export async function createTrustedSellerSubscription(subscription: InsertTrustedSellerSubscription) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  return await db.insert(trustedSellerSubscriptions).values(subscription);
+  try {
+    return await db.insert(trustedSellerSubscriptions).values(subscription);
+  } catch (error) {
+    handleDbError(error, "Failed to create trusted seller subscription");
+  }
 }
 
 export async function getUserActiveTrustedSubscription(userId: number) {
@@ -430,7 +422,14 @@ export async function getUserActiveTrustedSubscription(userId: number) {
   const result = await db
     .select()
     .from(trustedSellerSubscriptions)
-    .where(and(eq(trustedSellerSubscriptions.userId, userId), eq(trustedSellerSubscriptions.isActive, true)))
+    .where(
+      and(
+        eq(trustedSellerSubscriptions.userId, userId),
+        eq(trustedSellerSubscriptions.status, "active"),
+        gte(trustedSellerSubscriptions.expiresAt, new Date())
+      )
+    )
+    .orderBy(desc(trustedSellerSubscriptions.createdAt))
     .limit(1);
 
   return result.length > 0 ? result[0] : undefined;
@@ -442,10 +441,14 @@ export async function createNotification(notification: InsertNotification) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  return await db.insert(notifications).values(notification);
+  try {
+    return await db.insert(notifications).values(notification);
+  } catch (error) {
+    handleDbError(error, "Failed to create notification");
+  }
 }
 
-export async function getUserNotifications(userId: number, limit: number = 50) {
+export async function getUserNotifications(userId: number, limit: number = 50, offset: number = 0) {
   const db = await getDb();
   if (!db) return [];
 
@@ -454,150 +457,94 @@ export async function getUserNotifications(userId: number, limit: number = 50) {
     .from(notifications)
     .where(eq(notifications.userId, userId))
     .orderBy(desc(notifications.createdAt))
-    .limit(limit);
+    .limit(limit)
+    .offset(offset);
 }
 
-export async function markNotificationAsRead(id: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  await db.update(notifications).set({ isRead: true }).where(eq(notifications.id, id));
-}
-
-export async function sendGlobalNotification(title: string, message: string, type: "system" | "marketing") {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  const allUsers = await db.select({ id: users.id }).from(users);
-  
-  const notificationValues = allUsers.map(u => ({
-    userId: u.id,
-    title,
-    message,
-    type,
-    isRead: false
-  }));
-
-  // Insert in chunks to avoid large query issues
-  const chunkSize = 100;
-  for (let i = 0; i < notificationValues.length; i += chunkSize) {
-    const chunk = notificationValues.slice(i, i + chunkSize);
-    await db.insert(notifications).values(chunk);
-  }
-}
-
-// ============ PLATFORM SETTINGS OPERATIONS ============
+// ============ PLATFORM SETTINGS ============
 
 export async function getPlatformSettings() {
   const db = await getDb();
   if (!db) return undefined;
 
   const result = await db.select().from(platformSettings).limit(1);
-  
-  if (result.length === 0) {
-    // Create default settings if not exists
-    await db.insert(platformSettings).values({
-      platformName: "وثّقلي",
-      escrowCommissionPercentage: "2.5",
-      productCommissionPercentage: "5.0",
-      minWithdrawalAmount: "10.0",
-    });
-    const newResult = await db.select().from(platformSettings).limit(1);
-    return newResult[0];
-  }
-  
-  return result[0];
+  return result.length > 0 ? result[0] : undefined;
 }
 
-export async function updatePlatformSettings(settings: Partial<InsertPlatformSettings>) {
+export async function updatePlatformSettings(settings: InsertPlatformSettings) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  const currentSettings = await getPlatformSettings();
-  if (!currentSettings) throw new Error("Could not initialize settings");
-
-  await db.update(platformSettings)
-    .set(settings)
-    .where(eq(platformSettings.id, currentSettings.id));
+  try {
+    await db.insert(platformSettings).values(settings).onDuplicateKeyUpdate({ set: settings });
+  } catch (error) {
+    handleDbError(error, "Failed to update platform settings");
+  }
 }
 
-// ============ ADMIN LOG OPERATIONS ============
-
-export async function getAdminLogs(limit: number = 50, offset: number = 0) {
-  const db = await getDb();
-  if (!db) return [];
-
-  return await db
-    .select()
-    .from(adminLogs)
-    .orderBy(desc(adminLogs.createdAt))
-    .limit(limit)
-    .offset(offset);
-}
+// ============ ADMIN LOGS ============
 
 export async function createAdminLog(log: InsertAdminLog) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  return await db.insert(adminLogs).values(log);
+  try {
+    return await db.insert(adminLogs).values(log);
+  } catch (error) {
+    handleDbError(error, "Failed to create admin log");
+  }
 }
-
-// Helper function to import or
-import { or } from "drizzle-orm";
-
-export async function updateUserProfile(userId: number, updates: Partial<InsertUser>) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  const { eq } = await import("drizzle-orm");
-  
-  return await db
-    .update(users)
-    .set(updates)
-    .where(eq(users.id, userId));
-}
-
 
 // ============ CHAT OPERATIONS ============
 
-export async function createConversation(data: InsertChatConversation) {
+export async function createConversation(conversation: InsertChatConversation) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
-  return await db.insert(chatConversations).values(data);
+
+  try {
+    return await db.insert(chatConversations).values(conversation);
+  } catch (error) {
+    handleDbError(error, "Failed to create conversation");
+  }
 }
 
 export async function getConversation(conversationId: number) {
   const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  
-  return await db.select().from(chatConversations).where(eq(chatConversations.id, conversationId)).limit(1);
+  if (!db) return undefined;
+
+  const result = await db.select().from(chatConversations).where(eq(chatConversations.id, conversationId)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
 }
 
 export async function getUserConversations(userId: number) {
   const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  
-  return await db.select().from(chatConversations).where(
-    or(
-      eq(chatConversations.buyerId, userId),
-      eq(chatConversations.sellerId, userId)
-    )
-  );
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(chatConversations)
+    .where(or(eq(chatConversations.buyerId, userId), eq(chatConversations.sellerId, userId)))
+    .orderBy(desc(chatConversations.updatedAt));
 }
 
-export async function createMessage(data: InsertChatMessage) {
+export async function createMessage(message: InsertChatMessage) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
-  return await db.insert(chatMessages).values(data);
+
+  try {
+    return await db.insert(chatMessages).values(message);
+  } catch (error) {
+    handleDbError(error, "Failed to create message");
+  }
 }
 
-export async function getConversationMessages(conversationId: number, limit = 50, offset = 0) {
+export async function getConversationMessages(conversationId: number, limit: number, offset: number) {
   const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  
-  return await db.select().from(chatMessages)
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(chatMessages)
     .where(eq(chatMessages.conversationId, conversationId))
     .orderBy(desc(chatMessages.createdAt))
     .limit(limit)
@@ -607,36 +554,43 @@ export async function getConversationMessages(conversationId: number, limit = 50
 export async function markMessageAsRead(messageId: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
-  return await db.insert(chatReadReceipts).values({
-    messageId,
-    userId,
-  });
+
+  try {
+    return await db.insert(chatReadReceipts).values({ messageId, userId, readAt: new Date() });
+  } catch (error) {
+    handleDbError(error, "Failed to mark message as read");
+  }
 }
 
 export async function deleteMessage(messageId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
-  return await db.update(chatMessages)
-    .set({ isDeleted: true, deletedAt: new Date() })
-    .where(eq(chatMessages.id, messageId));
+
+  try {
+    await db.delete(chatMessages).where(eq(chatMessages.id, messageId));
+  } catch (error) {
+    handleDbError(error, "Failed to delete message");
+  }
 }
 
 export async function addMessageReaction(messageId: number, userId: number, reaction: string) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
-  return await db.insert(chatMessageReactions).values({
-    messageId,
-    userId,
-    reaction,
-  });
+
+  try {
+    return await db.insert(chatMessageReactions).values({ messageId, userId, reaction });
+  } catch (error) {
+    handleDbError(error, "Failed to add message reaction");
+  }
 }
 
-export async function uploadAttachment(data: InsertChatAttachment) {
+export async function uploadAttachment(attachment: InsertChatAttachment) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
-  return await db.insert(chatAttachments).values(data);
+
+  try {
+    return await db.insert(chatAttachments).values(attachment);
+  } catch (error) {
+    handleDbError(error, "Failed to upload attachment");
+  }
 }
