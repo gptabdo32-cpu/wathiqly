@@ -296,12 +296,21 @@ export const chatRouter = router({
 
   // Delete message
   deleteMessage: protectedProcedure
-    .input(z.object({ messageId: z.number() }))
+    .input(z.object({ 
+      messageId: z.number(),
+      conversationId: z.number()
+    }))
     .mutation(async ({ ctx, input }) => {
       try {
         const message = await getMessageById(input.messageId);
         if (!message) {
           throw new TRPCError({ code: "NOT_FOUND", message: "Message not found" });
+        }
+
+        // Security check: Verify the message belongs to the specified conversation
+        // This prevents cross-conversation message deletion via ID manipulation
+        if (message.conversationId !== input.conversationId) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Message does not belong to this conversation" });
         }
 
         // Only the sender can delete their message
