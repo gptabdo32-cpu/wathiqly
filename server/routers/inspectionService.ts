@@ -1,6 +1,9 @@
 import { router, protectedProcedure } from "../_core/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
+import { eq } from "drizzle-orm";
+import { getDb } from "../db";
+import { inspectionReports } from "../drizzle/schema_new_features";
 import {
   createInspectionReport,
   getInspectionReportById,
@@ -192,11 +195,22 @@ export const inspectionServiceRouter = router({
         });
       }
 
-      // Update report
-      await updateInspectionReportStatus(input.reportId, "completed", true);
+      // Update report with findings and media
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
 
-      // TODO: Update the report with findings and media
-      // This would require additional database operations
+      await db.update(inspectionReports)
+        .set({
+          summary: input.summary,
+          conditionScore: input.conditionScore,
+          findings: input.findings,
+          mediaUrls: input.mediaUrls,
+          status: "completed",
+          isVerified: true,
+          verifiedAt: new Date(),
+          updatedAt: new Date()
+        })
+        .where(eq(inspectionReports.id, input.reportId));
 
       return {
         success: true,
