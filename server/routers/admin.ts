@@ -1,7 +1,7 @@
 import { router, protectedProcedure, adminProcedure } from "../_core/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { createAdminLog } from "../db";
+import { createAdminLog, getAdminStats } from "../db";
 
 /**
  * Admin Router - يوفر العمليات الإدارية الأساسية
@@ -11,11 +11,22 @@ export const adminRouter = router({
    * الحصول على إحصائيات لوحة التحكم
    */
   getStats: adminProcedure.query(async ({ ctx }) => {
+    const stats = await getAdminStats();
+    
+    // Log admin access to stats
+    await createAdminLog({
+      adminId: ctx.user.id,
+      action: "view_stats",
+      targetType: "system",
+      targetId: 0,
+      details: JSON.stringify({ timestamp: new Date() }),
+    });
+
     return {
-      totalUsers: 0,
-      totalTransactions: 0,
-      totalRevenue: "0",
-      pendingDisputes: 0,
+      totalUsers: stats.totalUsers,
+      totalTransactions: stats.totalTransactions,
+      totalVolume: stats.totalVolume,
+      activeDisputes: stats.activeDisputes,
     };
   }),
 
