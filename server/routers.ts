@@ -29,6 +29,7 @@ import {
 } from "./db";
 import { adminRouter } from "./routers/admin";
 import { encryptData } from "./_core/encryption";
+import { Decimal } from "decimal.js";
 import { chatRouter } from "./routers/chat";
 import { eq } from "drizzle-orm";
 import { desc } from "drizzle-orm";
@@ -138,10 +139,10 @@ export const appRouter = router({
             }
 
             // Validate balance
-            const availableBalance = Number(wallet.balance);
-            const requestedAmount = Number(input.amount);
+            const availableBalance = new Decimal(wallet.balance);
+            const requestedAmount = new Decimal(input.amount);
 
-            if (requestedAmount > availableBalance) {
+            if (requestedAmount.gt(availableBalance)) {
               throw new TRPCError({
                 code: "BAD_REQUEST",
                 message: "Insufficient balance",
@@ -149,8 +150,8 @@ export const appRouter = router({
             }
 
             // 1. Deduct from balance and move to pending
-            const newBalance = (availableBalance - requestedAmount).toFixed(2);
-            const newPendingBalance = (Number(wallet.pendingBalance) + requestedAmount).toFixed(2);
+            const newBalance = availableBalance.minus(requestedAmount).toFixed(2);
+            const newPendingBalance = new Decimal(wallet.pendingBalance).plus(requestedAmount).toFixed(2);
 
             await tx.update(wallets)
               .set({ 
@@ -231,10 +232,9 @@ export const appRouter = router({
         }
 
         // Create escrow
-        const commissionAmount = (
-          Number(input.amount) *
-          (parseFloat(input.commissionPercentage) / 100)
-        ).toFixed(2);
+        const commissionAmount = new Decimal(input.amount)
+          .mul(new Decimal(input.commissionPercentage).div(100))
+          .toFixed(2);
 
         const result = await createEscrow({
           buyerId: ctx.user.id,
@@ -392,14 +392,14 @@ export const appRouter = router({
             await tx.update(escrows).set({ status: "completed", completedAt: new Date() }).where(eq(escrows.id, input.escrowId));
 
             // Calculate amount to release to seller (total - commission)
-            const releaseAmount = (parseFloat(escrow.amount) - parseFloat(escrow.commissionAmount)).toFixed(2);
+            const releaseAmount = new Decimal(escrow.amount).minus(new Decimal(escrow.commissionAmount)).toFixed(2);
 
             // Update seller wallet with lock
             const [sellerWallet] = await tx.select().from(wallets).where(eq(wallets.userId, escrow.sellerId)).limit(1).for("update");
             
             if (sellerWallet) {
-              const newBalance = (parseFloat(sellerWallet.balance) + parseFloat(releaseAmount)).toFixed(2);
-              const newTotalEarned = (parseFloat(sellerWallet.totalEarned) + parseFloat(releaseAmount)).toFixed(2);
+              const newBalance = new Decimal(sellerWallet.balance).plus(new Decimal(releaseAmount)).toFixed(2);
+              const newTotalEarned = new Decimal(sellerWallet.totalEarned).plus(new Decimal(releaseAmount)).toFixed(2);
               await tx.update(wallets).set({ balance: newBalance, totalEarned: newTotalEarned }).where(eq(wallets.id, sellerWallet.id));
             } else {
               await tx.insert(wallets).values({
