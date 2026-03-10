@@ -242,9 +242,20 @@ export const chatRouter = router({
     .input(z.object({ messageId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       try {
+        const message = await getMessageById(input.messageId);
+        if (!message) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Message not found" });
+        }
+
+        const conversation = await getConversation(message.conversationId);
+        if (!conversation || (conversation.buyerId !== ctx.user.id && conversation.sellerId !== ctx.user.id)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
+        }
+
         await markMessageAsRead(input.messageId, ctx.user.id);
         return { success: true };
       } catch (error) {
+        if (error instanceof TRPCError) throw error;
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to mark message as read",
@@ -257,9 +268,20 @@ export const chatRouter = router({
     .input(z.object({ messageId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       try {
+        const message = await getMessageById(input.messageId);
+        if (!message) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Message not found" });
+        }
+
+        // Only the sender can delete their message
+        if (message.senderId !== ctx.user.id) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "You can only delete your own messages" });
+        }
+
         await deleteMessage(input.messageId);
         return { success: true };
       } catch (error) {
+        if (error instanceof TRPCError) throw error;
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to delete message",
@@ -277,7 +299,17 @@ export const chatRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       try {
-        const result = await addMessageReaction(
+        const message = await getMessageById(input.messageId);
+        if (!message) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Message not found" });
+        }
+
+        const conversation = await getConversation(message.conversationId);
+        if (!conversation || (conversation.buyerId !== ctx.user.id && conversation.sellerId !== ctx.user.id)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
+        }
+
+        await addMessageReaction(
           input.messageId,
           ctx.user.id,
           input.reaction
@@ -285,6 +317,7 @@ export const chatRouter = router({
 
         return { success: true };
       } catch (error) {
+        if (error instanceof TRPCError) throw error;
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to add reaction",

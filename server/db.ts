@@ -551,6 +551,14 @@ export async function getConversationMessages(conversationId: number, limit: num
     .offset(offset);
 }
 
+export async function getMessageById(messageId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db.select().from(chatMessages).where(eq(chatMessages.id, messageId)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
 export async function markMessageAsRead(messageId: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
