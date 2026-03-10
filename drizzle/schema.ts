@@ -547,3 +547,22 @@ export const chatAttachments = mysqlTable("chatAttachments", {
 
 export type ChatAttachment = typeof chatAttachments.$inferSelect;
 export type InsertChatAttachment = typeof chatAttachments.$inferInsert;
+
+/**
+ * Audit Logs table - tracks all sensitive actions and changes in the system
+ */
+export const auditLogs = mysqlTable("auditLogs", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(), // User who performed the action
+  action: varchar("action", { length: 255 }).notNull(), // e.g., 'user_login', 'escrow_created', 'wallet_updated'
+  entityType: varchar("entityType", { length: 255 }), // e.g., 'user', 'escrow', 'wallet'
+  entityId: int("entityId"), // ID of the entity affected by the action
+  oldValue: json("oldValue"), // Previous state of the entity (optional)
+  newValue: json("newValue"), // New state of the entity (optional)
+  ipAddress: varchar("ipAddress", { length: 45 }), // IP address of the user
+  userAgent: text("userAgent"), // User agent string
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type InsertAuditLog = typeof auditLogs.$inferInsert;

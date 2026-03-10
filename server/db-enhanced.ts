@@ -644,3 +644,39 @@ export async function getAllTransactions(options?: {
     .limit(options?.limit || 50)
     .offset(options?.offset || 0);
 }
+
+/**
+ * Create an audit log entry for sensitive actions.
+ */
+export async function createAuditLog(log: {
+  userId: number;
+  action: string;
+  entityType?: string;
+  entityId?: number;
+  oldValue?: object;
+  newValue?: object;
+  ipAddress?: string;
+  userAgent?: string;
+}) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot create audit log: database not available");
+    return;
+  }
+
+  try {
+    await db.insert(auditLogs).values({
+      userId: log.userId,
+      action: log.action,
+      entityType: log.entityType,
+      entityId: log.entityId,
+      oldValue: log.oldValue ? JSON.stringify(log.oldValue) : null,
+      newValue: log.newValue ? JSON.stringify(log.newValue) : null,
+      ipAddress: log.ipAddress,
+      userAgent: log.userAgent,
+      createdAt: new Date(),
+    });
+  } catch (error) {
+    console.error("[Database] Failed to create audit log:", error);
+  }
+}

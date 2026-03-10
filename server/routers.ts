@@ -1,4 +1,5 @@
 import { COOKIE_NAME } from "@shared/const";
+import { createAuditLog } from "./db-enhanced";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router, protectedProcedure } from "./_core/trpc";
@@ -70,6 +71,15 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         try {
           await updateUserProfile(ctx.user.id, input);
+          await createAuditLog({
+            userId: ctx.user.id,
+            action: "user_profile_update",
+            entityType: "user",
+            entityId: ctx.user.id,
+            newValue: input,
+            ipAddress: ctx.req.ip,
+            userAgent: ctx.req.headers["user-agent"],
+          });
           return { success: true };
         } catch (error) {
           throw new TRPCError({
@@ -181,7 +191,17 @@ export const appRouter = router({
               description: `Withdrawal request via ${input.paymentMethod}`,
             } as any);
 
-            return { success: true, withdrawalId: result.insertId };
+            const withdrawalResult = { success: true, withdrawalId: result.insertId };
+            await createAuditLog({
+              userId: ctx.user.id,
+              action: "withdrawal_request",
+              entityType: "wallet",
+              entityId: wallet.id,
+              newValue: { amount: input.amount, paymentMethod: input.paymentMethod, withdrawalId: result.insertId },
+              ipAddress: ctx.req.ip,
+              userAgent: ctx.req.headers["user-agent"],
+            });
+            return withdrawalResult;
           });
         } catch (error) {
           if (error instanceof TRPCError) throw error;
