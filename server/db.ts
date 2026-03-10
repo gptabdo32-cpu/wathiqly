@@ -214,19 +214,23 @@ export async function getEscrowById(id: number) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-export async function getUserEscrows(userId: number, limit: number = 50, offset: number = 0) {
+export async function getUserEscrows(userId: number, limit: number = 50, offset: number = 0, status?: string) {
   const db = await getDb();
   if (!db) return [];
+
+  let conditions = or(
+    eq(escrows.buyerId, userId),
+    eq(escrows.sellerId, userId)
+  );
+
+  if (status) {
+    conditions = and(conditions, eq(escrows.status, status as any));
+  }
 
   return await db
     .select()
     .from(escrows)
-    .where(
-      or(
-        eq(escrows.buyerId, userId),
-        eq(escrows.sellerId, userId)
-      )
-    )
+    .where(conditions)
     .orderBy(desc(escrows.createdAt))
     .limit(limit)
     .offset(offset);

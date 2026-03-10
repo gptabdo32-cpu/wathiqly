@@ -286,13 +286,8 @@ export const appRouter = router({
         })
       )
       .query(async ({ ctx, input }) => {
-        let escrows = await getUserEscrows(ctx.user.id, input.limit, input.offset);
-
-        if (input.status) {
-          escrows = escrows.filter((e: any) => e.status === input.status);
-        }
-
-        return escrows;
+        // Optimization: Filtering at the database level is more efficient than in-memory filtering
+        return await getUserEscrows(ctx.user.id, input.limit, input.offset, input.status);
       }),
 
     depositFunds: protectedProcedure
