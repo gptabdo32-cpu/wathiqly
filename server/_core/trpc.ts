@@ -10,8 +10,17 @@ const t = initTRPC.context<TrpcContext>().create({
 export const router = t.router;
 export const publicProcedure = t.procedure;
 
-const requireUser = t.middleware(async opts => {
+  const requireUser = t.middleware(async opts => {
   const { ctx, next } = opts;
+
+  // Basic CSRF protection: Ensure requests have a custom header
+  // Browser-based CSRF attacks typically cannot set custom headers
+  if (ctx.req.method !== "GET" && !ctx.req.headers["x-trpc-source"]) {
+    throw new TRPCError({ 
+      code: "FORBIDDEN", 
+      message: "CSRF protection: Missing required header" 
+    });
+  }
 
   if (!ctx.user) {
     throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
