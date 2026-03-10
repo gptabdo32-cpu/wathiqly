@@ -17,6 +17,7 @@ import {
   deleteMessage,
   addMessageReaction,
   uploadAttachment,
+  getEscrowById,
 } from "../db";
 import { storagePut } from "../storage";
 
@@ -32,6 +33,20 @@ export const chatRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       try {
+        // Security check: Verify escrow exists and user is a participant
+        const escrow = await getEscrowById(input.escrowId);
+        if (!escrow) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Escrow transaction not found" });
+        }
+        if (escrow.buyerId !== ctx.user.id && escrow.sellerId !== ctx.user.id) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "You are not a participant in this escrow" });
+        }
+        
+        // Verify otherUserId is also a participant
+        if (escrow.buyerId !== input.otherUserId && escrow.sellerId !== input.otherUserId) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "The other user is not a participant in this escrow" });
+        }
+
         const result = await createConversation({
           escrowId: input.escrowId,
           buyerId: Math.min(ctx.user.id, input.otherUserId),
@@ -44,6 +59,7 @@ export const chatRouter = router({
           conversationId: result[0].insertId,
         };
       } catch (error) {
+        if (error instanceof TRPCError) throw error;
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to create conversation",
