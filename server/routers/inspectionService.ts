@@ -119,20 +119,21 @@ export const inspectionServiceRouter = router({
         });
       }
 
-      // Verify user is part of the escrow
-      if (
-        escrow.buyerId !== ctx.user.id &&
-        escrow.sellerId !== ctx.user.id
-      ) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "You are not part of this escrow",
-        });
-      }
-
       const report = await getInspectionReportByEscrowId(input.escrowId);
       if (!report) {
         return null;
+      }
+
+      // Verify user is part of the escrow or the assigned inspector
+      if (
+        escrow.buyerId !== ctx.user.id &&
+        escrow.sellerId !== ctx.user.id &&
+        report.inspectorId !== ctx.user.id
+      ) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You are not authorized to view this report",
+        });
       }
 
       // Get inspector info
