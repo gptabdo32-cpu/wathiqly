@@ -370,7 +370,7 @@ export const chatRouter = router({
     .input(
       z.object({
         messageId: z.number(),
-        reaction: z.string(), // e.g., "👍", "❤️", "😂"
+        reaction: z.string().min(1).max(10, "Reaction too long"), // e.g., "👍", "❤️", "😂"
       })
     )
     .mutation(async ({ ctx, input }) => {
