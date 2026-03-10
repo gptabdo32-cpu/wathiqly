@@ -285,21 +285,33 @@ export const appRouter = router({
           });
         }
 
-        // Update escrow status to funded
-        await updateEscrowStatus(input.escrowId, "funded");
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
 
-        // Create transaction record
-        await createTransaction({
-          userId: ctx.user.id,
-          type: "deposit",
-          amount: escrow.amount,
-          status: "completed",
-          escrowId: input.escrowId,
-          description: `Escrow deposit for transaction ${input.escrowId}`,
-          reference: input.transactionProof,
-        } as any);
+        try {
+          await db.transaction(async (tx) => {
+            // Update escrow status to funded
+            await tx.update(escrows).set({ status: "funded", fundedAt: new Date() }).where(eq(escrows.id, input.escrowId));
 
-        return { success: true };
+            // Create transaction record
+            await tx.insert(transactions).values({
+              userId: ctx.user.id,
+              type: "deposit",
+              amount: escrow.amount,
+              status: "completed",
+              escrowId: input.escrowId,
+              description: `Escrow deposit for transaction ${input.escrowId}`,
+              reference: input.transactionProof,
+            } as any);
+          });
+
+          return { success: true };
+        } catch (error) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to process deposit",
+          });
+        }
       }),
 
     confirmDelivery: protectedProcedure
@@ -328,10 +340,51 @@ export const appRouter = router({
           });
         }
 
-        // Update escrow status to completed
-        await updateEscrowStatus(input.escrowId, "completed");
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
 
-        return { success: true };
+        try {
+          await db.transaction(async (tx) => {
+            // Update escrow status to completed
+            await tx.update(escrows).set({ status: "completed", completedAt: new Date() }).where(eq(escrows.id, input.escrowId));
+
+            // Calculate amount to release to seller (total - commission)
+            const releaseAmount = (parseFloat(escrow.amount) - parseFloat(escrow.commissionAmount)).toFixed(2);
+
+            // Update seller wallet
+            const [sellerWallet] = await tx.select().from(wallets).where(eq(wallets.userId, escrow.sellerId)).limit(1);
+            if (sellerWallet) {
+              const newBalance = (parseFloat(sellerWallet.balance) + parseFloat(releaseAmount)).toFixed(2);
+              const newTotalEarned = (parseFloat(sellerWallet.totalEarned) + parseFloat(releaseAmount)).toFixed(2);
+              await tx.update(wallets).set({ balance: newBalance, totalEarned: newTotalEarned }).where(eq(wallets.id, sellerWallet.id));
+            } else {
+              await tx.insert(wallets).values({
+                userId: escrow.sellerId,
+                balance: releaseAmount,
+                totalEarned: releaseAmount,
+                pendingBalance: "0",
+                totalWithdrawn: "0"
+              });
+            }
+
+            // Create transaction record for seller
+            await tx.insert(transactions).values({
+              userId: escrow.sellerId,
+              type: "deposit",
+              amount: releaseAmount,
+              status: "completed",
+              escrowId: input.escrowId,
+              description: `Escrow release for transaction ${input.escrowId}`,
+            } as any);
+          });
+
+          return { success: true };
+        } catch (error) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to confirm delivery and release funds",
+          });
+        }
       }),
 
     raiseDispute: protectedProcedure
