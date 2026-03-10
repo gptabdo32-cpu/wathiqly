@@ -83,6 +83,8 @@ export const disputeCollaterals = mysqlTable("disputeCollaterals", {
   // Collateral status
   status: mysqlEnum("status", [
     "pending",      // Collateral payment is pending
+    paymentMethod: varchar("paymentMethod", { length: 50 }),
+    paymentDetails: json("paymentDetails"),
     "held",         // Collateral is held while dispute is being resolved
     "refunded",     // Collateral was refunded to the payer
     "forfeited",    // Collateral was forfeited (given to the other party or platform)

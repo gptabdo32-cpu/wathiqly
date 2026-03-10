@@ -368,24 +368,35 @@ export const disputeCollateralRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // Get or create wallet
-      const wallet = await getOrCreateDisputeCollateralWallet(ctx.user.id);
+      // For now, we'll just create a pending collateral record.
+      // In a real-world scenario, this would initiate a payment gateway process.
+      // The wallet balance would only be updated after a successful payment webhook callback.
 
-      // Update available balance
-      const newBalance = (
-        parseFloat(wallet.availableBalance) + parseFloat(input.amount)
-      ).toFixed(2);
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
 
-      await updateDisputeCollateralWallet(ctx.user.id, newBalance);
+      try {
+        const [collateralResult] = await db.insert(disputeCollaterals).values({
+          escrowId: 0, // No specific escrow yet, this is a general deposit
+          paidBy: ctx.user.id,
+          amount: input.amount,
+          status: "pending", // Mark as pending until payment is confirmed
+          paymentMethod: input.paymentMethod,
+          paymentDetails: input.paymentDetails,
+        });
 
-      // TODO: Process payment through payment gateway
-      // For now, just update the wallet
-
-      return {
-        success: true,
-        message: "Funds deposited to collateral wallet",
-        newBalance,
-      };
+        return {
+          success: true,
+          collateralId: collateralResult.insertId,
+          message: "Collateral deposit initiated. Waiting for payment confirmation.",
+        };
+      } catch (error) {
+        if (error instanceof TRPCError) throw error;
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to initiate collateral deposit",
+        });
+      }
     }),
 
   /**
