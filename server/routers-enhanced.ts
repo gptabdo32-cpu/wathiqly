@@ -21,6 +21,9 @@ import {
   markNotificationAsRead,
   createFinancialTransaction,
 } from "./db-enhanced";
+import { getDb } from "./db";
+import { eq, desc } from "drizzle-orm";
+import { escrows, notifications, users } from "../drizzle/schema";
 
 /**
  * Enhanced routers with security, dispute management, and real-time notifications
@@ -39,6 +42,9 @@ export const enhancedRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+
         // Verify user is part of the transaction
         const escrow = await db.query.escrows.findFirst({
           where: eq(escrows.id, input.escrowId),
@@ -91,6 +97,9 @@ export const enhancedRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+
         // Verify user is part of the transaction
         const escrow = await db.query.escrows.findFirst({
           where: eq(escrows.id, input.escrowId),
@@ -132,6 +141,9 @@ export const enhancedRouter = router({
     getMessages: protectedProcedure
       .input(z.object({ escrowId: z.number() }))
       .query(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+
         // Verify user is part of the transaction
         const escrow = await db.query.escrows.findFirst({
           where: eq(escrows.id, input.escrowId),
@@ -167,6 +179,9 @@ export const enhancedRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+
         // Verify user is part of the transaction
         const escrow = await db.query.escrows.findFirst({
           where: eq(escrows.id, input.escrowId),
@@ -213,6 +228,9 @@ export const enhancedRouter = router({
     markAsRead: protectedProcedure
       .input(z.object({ notificationId: z.number() }))
       .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+
         // Verify notification belongs to user
         const notification = await db.query.notifications.findFirst({
           where: eq(notifications.id, input.notificationId),
@@ -247,6 +265,9 @@ export const enhancedRouter = router({
         })
       )
       .query(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+
         return await db.query.notifications.findMany({
           where: eq(notifications.userId, ctx.user.id),
           limit: input.limit,
@@ -269,9 +290,13 @@ export const enhancedRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+
         // Update user with identity document URL
         await db.update(users).set({
           identityDocumentUrl: input.documentUrl,
+          kycStatus: "pending",
           updatedAt: new Date(),
         }).where(eq(users.id, ctx.user.id));
 
@@ -300,8 +325,15 @@ export const enhancedRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+
         // In production, verify OTP against sent SMS
-        // For now, we'll just mark as verified
+        // SECURITY: Implement proper OTP verification logic here
+        if (input.otp !== "123456") { // Placeholder for demo, should be replaced with real OTP check
+           throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid OTP" });
+        }
+
         await db.update(users).set({
           phone: input.phoneNumber,
           isPhoneVerified: true,
@@ -316,6 +348,9 @@ export const enhancedRouter = router({
      * Get KYC status
      */
     getStatus: protectedProcedure.query(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+
       const user = await db.query.users.findFirst({
         where: eq(users.id, ctx.user.id),
       });
@@ -345,6 +380,9 @@ export const enhancedRouter = router({
     completeTransaction: protectedProcedure
       .input(z.object({ escrowId: z.number() }))
       .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+
         const escrow = await db.query.escrows.findFirst({
           where: eq(escrows.id, input.escrowId),
         });
