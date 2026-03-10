@@ -57,11 +57,11 @@ export const appRouter = router({
     updateProfile: protectedProcedure
       .input(
         z.object({
-          name: z.string().min(2).max(100).optional(),
-          bio: z.string().max(500).optional(),
-          city: z.string().max(100).optional(),
-          phone: z.string().regex(/^(\+218|0)[0-9]{9}$/, "Invalid Libyan phone number format").optional(),
-          profileImage: z.string().url().optional(),
+          name: z.string().min(2, "Name must be at least 2 characters").max(100, "Name too long").trim().optional(),
+          bio: z.string().max(500, "Bio too long").trim().optional(),
+          city: z.string().max(100, "City name too long").trim().optional(),
+          phone: z.string().regex(/^(\+218|0)(91|92|94|95)[0-9]{7}$/, "Invalid Libyan mobile number format").optional(),
+          profileImage: z.string().url("Invalid image URL").optional(),
           userType: z.enum(["buyer", "seller", "both"]).optional(),
         })
       )
