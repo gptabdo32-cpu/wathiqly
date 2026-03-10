@@ -1,6 +1,7 @@
 import { router, protectedProcedure, adminProcedure } from "../_core/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
+import { createAdminLog } from "../db";
 
 /**
  * Admin Router - يوفر العمليات الإدارية الأساسية
@@ -42,6 +43,14 @@ export const adminRouter = router({
   suspendUser: adminProcedure
     .input(z.object({ userId: z.number(), reason: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      // Log the action
+      await createAdminLog({
+        adminId: ctx.user.id,
+        action: "suspend_user",
+        targetType: "user",
+        targetId: input.userId,
+        details: JSON.stringify({ reason: input.reason }),
+      });
       return { success: true };
     }),
 
@@ -82,6 +91,17 @@ export const adminRouter = router({
       decision: z.enum(["buyer", "seller", "split"]),
     }))
     .mutation(async ({ ctx, input }) => {
+      // Log the action
+      await createAdminLog({
+        adminId: ctx.user.id,
+        action: "resolve_dispute",
+        targetType: "dispute",
+        targetId: input.disputeId,
+        details: JSON.stringify({ 
+          resolution: input.resolution,
+          decision: input.decision 
+        }),
+      });
       return { success: true };
     }),
 
@@ -116,6 +136,13 @@ export const adminRouter = router({
       minWithdrawalAmount: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      // Log the action
+      await createAdminLog({
+        adminId: ctx.user.id,
+        action: "update_settings",
+        targetType: "platform_settings",
+        details: JSON.stringify(input),
+      });
       return { success: true };
     }),
 });
