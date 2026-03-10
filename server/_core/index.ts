@@ -30,17 +30,35 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
-  // Configure body parser with larger size limit for file uploads
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-  // Simple CSRF protection: check for custom header on non-GET requests
+  // Security: Basic Security Headers
+  app.use((req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("X-XSS-Protection", "1; mode=block");
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    res.setHeader("Content-Security-Policy", "default-src 'self'; img-src 'self' data: https:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';");
+    next();
+  });
+
+  // Configure body parser with controlled size limits
+  app.use(express.json({ limit: "20mb" }));
+  app.use(express.urlencoded({ limit: "20mb", extended: true }));
+
+  // Enhanced CSRF protection for non-GET requests
   app.use((req, res, next) => {
     const protectedMethods = ["POST", "PUT", "DELETE", "PATCH"];
     if (protectedMethods.includes(req.method)) {
       const csrfHeader = req.headers["x-trpc-source"] || req.headers["x-requested-with"];
+      const origin = req.headers["origin"];
+      
+      // Verify custom header and basic origin check
       if (!csrfHeader) {
-        return res.status(403).json({ error: "CSRF protection: Missing required header" });
+        return res.status(403).json({ error: "Security Policy: Missing required authentication header" });
+      }
+      
+      if (process.env.NODE_ENV === "production" && origin && !origin.includes(req.headers["host"] as string)) {
+        return res.status(403).json({ error: "Security Policy: Origin mismatch" });
       }
     }
     next();
