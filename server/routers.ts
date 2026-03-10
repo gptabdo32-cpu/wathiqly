@@ -57,11 +57,11 @@ export const appRouter = router({
     updateProfile: protectedProcedure
       .input(
         z.object({
-          name: z.string().optional(),
-          bio: z.string().optional(),
-          city: z.string().optional(),
-          phone: z.string().optional(),
-          profileImage: z.string().optional(),
+          name: z.string().min(2).max(100).optional(),
+          bio: z.string().max(500).optional(),
+          city: z.string().max(100).optional(),
+          phone: z.string().regex(/^(\+218|0)[0-9]{9}$/, "Invalid Libyan phone number format").optional(),
+          profileImage: z.string().url().optional(),
           userType: z.enum(["buyer", "seller", "both"]).optional(),
         })
       )
