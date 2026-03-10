@@ -1,4 +1,4 @@
-import { router, protectedProcedure } from "../_core/trpc";
+import { router, protectedProcedure, adminProcedure } from "../_core/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 
@@ -9,14 +9,7 @@ export const adminRouter = router({
   /**
    * الحصول على إحصائيات لوحة التحكم
    */
-  getStats: protectedProcedure.query(async ({ ctx }) => {
-    if (ctx.user?.role !== "admin") {
-      throw new TRPCError({
-        code: "UNAUTHORIZED",
-        message: "ليس لديك صلاحيات كافية للوصول إلى هذا الموارد",
-      });
-    }
-
+  getStats: adminProcedure.query(async ({ ctx }) => {
     return {
       totalUsers: 0,
       totalTransactions: 0,
@@ -28,146 +21,83 @@ export const adminRouter = router({
   /**
    * الحصول على قائمة المستخدمين
    */
-  listUsers: protectedProcedure
+  listUsers: adminProcedure
     .input(z.object({ limit: z.number().default(50), offset: z.number().default(0) }))
     .query(async ({ ctx }) => {
-      if (ctx.user?.role !== "admin") {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "ليس لديك صلاحيات كافية",
-        });
-      }
-
       return [];
     }),
 
   /**
    * الحصول على تفاصيل المستخدم
    */
-  getUserDetails: protectedProcedure
+  getUserDetails: adminProcedure
     .input(z.object({ userId: z.number() }))
     .query(async ({ ctx, input }) => {
-      if (ctx.user?.role !== "admin") {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "ليس لديك صلاحيات كافية",
-        });
-      }
-
       return null;
     }),
 
   /**
    * إيقاف المستخدم
    */
-  suspendUser: protectedProcedure
+  suspendUser: adminProcedure
     .input(z.object({ userId: z.number(), reason: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      if (ctx.user?.role !== "admin") {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "ليس لديك صلاحيات كافية",
-        });
-      }
-
       return { success: true };
     }),
 
   /**
    * الحصول على قائمة المعاملات
    */
-  listTransactions: protectedProcedure
+  listTransactions: adminProcedure
     .input(z.object({ limit: z.number().default(50), offset: z.number().default(0) }))
     .query(async ({ ctx }) => {
-      if (ctx.user?.role !== "admin") {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "ليس لديك صلاحيات كافية",
-        });
-      }
-
       return [];
     }),
 
   /**
    * الحصول على تفاصيل المعاملة
    */
-  getTransactionDetails: protectedProcedure
+  getTransactionDetails: adminProcedure
     .input(z.object({ transactionId: z.number() }))
     .query(async ({ ctx, input }) => {
-      if (ctx.user?.role !== "admin") {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "ليس لديك صلاحيات كافية",
-        });
-      }
-
       return null;
     }),
 
   /**
    * الحصول على قائمة النزاعات
    */
-  listDisputes: protectedProcedure
+  listDisputes: adminProcedure
     .input(z.object({ limit: z.number().default(50), offset: z.number().default(0) }))
     .query(async ({ ctx }) => {
-      if (ctx.user?.role !== "admin") {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "ليس لديك صلاحيات كافية",
-        });
-      }
-
       return [];
     }),
 
   /**
    * حل النزاع
    */
-  resolveDispute: protectedProcedure
+  resolveDispute: adminProcedure
     .input(z.object({
       disputeId: z.number(),
       resolution: z.string(),
       decision: z.enum(["buyer", "seller", "split"]),
     }))
     .mutation(async ({ ctx, input }) => {
-      if (ctx.user?.role !== "admin") {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "ليس لديك صلاحيات كافية",
-        });
-      }
-
       return { success: true };
     }),
 
   /**
    * الحصول على سجلات الإدارة
    */
-  getAdminLogs: protectedProcedure
+  getAdminLogs: adminProcedure
     .input(z.object({ limit: z.number().default(50), offset: z.number().default(0) }))
     .query(async ({ ctx }) => {
-      if (ctx.user?.role !== "admin") {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "ليس لديك صلاحيات كافية",
-        });
-      }
-
       return [];
     }),
 
   /**
    * إعدادات المنصة
    */
-  getPlatformSettings: protectedProcedure.query(async ({ ctx }) => {
-    if (ctx.user?.role !== "admin") {
-      throw new TRPCError({
-        code: "UNAUTHORIZED",
-        message: "ليس لديك صلاحيات كافية",
-      });
-    }
-
+  getPlatformSettings: adminProcedure.query(async ({ ctx }) => {
     return {
       platformName: "وثّقلي",
       escrowCommissionPercentage: "2.5",
@@ -179,20 +109,13 @@ export const adminRouter = router({
   /**
    * تحديث إعدادات المنصة
    */
-  updatePlatformSettings: protectedProcedure
+  updatePlatformSettings: adminProcedure
     .input(z.object({
       escrowCommissionPercentage: z.string().optional(),
       productCommissionPercentage: z.string().optional(),
       minWithdrawalAmount: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      if (ctx.user?.role !== "admin") {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "ليس لديك صلاحيات كافية",
-        });
-      }
-
       return { success: true };
     }),
 });
