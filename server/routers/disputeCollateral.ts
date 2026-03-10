@@ -9,7 +9,10 @@ import {
   getUserActiveCollaterals,
   updateDisputeCollateralWallet,
   getFeatureSettings,
+  getDb,
 } from "../db_new_features";
+import { disputeCollateralWallets, disputeCollaterals } from "../drizzle/schema_new_features";
+import { eq } from "drizzle-orm";
 import { getEscrowById, getUserById } from "../db";
 
 export const disputeCollateralRouter = router({
@@ -89,43 +92,69 @@ export const disputeCollateralRouter = router({
         });
       }
 
-      // Get or create wallet
-      const wallet = await getOrCreateDisputeCollateralWallet(ctx.user.id);
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
 
-      // Check available balance
-      const availableBalance = parseFloat(wallet.availableBalance);
-      if (availableBalance < collateralAmount) {
+      try {
+        return await db.transaction(async (tx) => {
+          // Get or create wallet with lock
+          let [wallet] = await tx.select().from(disputeCollateralWallets).where(eq(disputeCollateralWallets.userId, ctx.user.id)).limit(1).for("update");
+          
+          if (!wallet) {
+            await tx.insert(disputeCollateralWallets).values({
+              userId: ctx.user.id,
+              availableBalance: "0",
+              heldBalance: "0",
+              totalForfeited: "0",
+              totalRefunded: "0",
+            });
+            [wallet] = await tx.select().from(disputeCollateralWallets).where(eq(disputeCollateralWallets.userId, ctx.user.id)).limit(1).for("update");
+          }
+
+          // Check available balance
+          const availableBalance = parseFloat(wallet.availableBalance);
+          if (availableBalance < collateralAmount) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Insufficient collateral balance. Please deposit funds.",
+            });
+          }
+
+          // Create collateral record
+          const [collateralResult] = await tx.insert(disputeCollaterals).values({
+            escrowId: input.escrowId,
+            paidBy: ctx.user.id,
+            amount: input.amount,
+            status: "held",
+          });
+
+          // Update wallet: deduct from available, add to held
+          const newAvailable = (availableBalance - collateralAmount).toFixed(2);
+          const newHeld = (
+            parseFloat(wallet.heldBalance) + collateralAmount
+          ).toFixed(2);
+
+          await tx.update(disputeCollateralWallets)
+            .set({ 
+              availableBalance: newAvailable, 
+              heldBalance: newHeld,
+              updatedAt: new Date() 
+            })
+            .where(eq(disputeCollateralWallets.userId, ctx.user.id));
+
+          return {
+            success: true,
+            collateralId: collateralResult.insertId,
+            message: "Collateral deposited successfully",
+          };
+        });
+      } catch (error) {
+        if (error instanceof TRPCError) throw error;
         throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Insufficient collateral balance. Please deposit funds.",
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to process collateral deposit",
         });
       }
-
-      // Create collateral record
-      const collateralResult = await createDisputeCollateral({
-        escrowId: input.escrowId,
-        paidBy: ctx.user.id,
-        amount: input.amount,
-        status: "held",
-      });
-
-      // Update wallet: deduct from available, add to held
-      const newAvailable = (availableBalance - collateralAmount).toFixed(2);
-      const newHeld = (
-        parseFloat(wallet.heldBalance) + collateralAmount
-      ).toFixed(2);
-
-      await updateDisputeCollateralWallet(
-        ctx.user.id,
-        newAvailable,
-        newHeld
-      );
-
-      return {
-        success: true,
-        collateralId: collateralResult[0].insertId,
-        message: "Collateral deposited successfully",
-      };
     }),
 
   /**
