@@ -34,9 +34,15 @@ export const adminRouter = router({
    * الحصول على قائمة المستخدمين
    */
   listUsers: adminProcedure
-    .input(z.object({ limit: z.number().default(50), offset: z.number().default(0) }))
-    .query(async ({ ctx }) => {
-      return [];
+    .input(z.object({ 
+      limit: z.number().default(50), 
+      offset: z.number().default(0),
+      search: z.string().optional(),
+      kycStatus: z.enum(["verified", "pending", "rejected"]).optional(),
+    }))
+    .query(async ({ input }) => {
+      const { getAllUsers } = await import("../db-enhanced");
+      return await getAllUsers(input);
     }),
 
   /**
@@ -44,8 +50,11 @@ export const adminRouter = router({
    */
   getUserDetails: adminProcedure
     .input(z.object({ userId: z.number() }))
-    .query(async ({ ctx, input }) => {
-      return null;
+    .query(async ({ input }) => {
+      const { getUserById } = await import("../db");
+      const user = await getUserById(input.userId);
+      if (!user) throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+      return user;
     }),
 
   /**
@@ -70,8 +79,9 @@ export const adminRouter = router({
    */
   listTransactions: adminProcedure
     .input(z.object({ limit: z.number().default(50), offset: z.number().default(0) }))
-    .query(async ({ ctx }) => {
-      return [];
+    .query(async () => {
+      const { getAllTransactions } = await import("../db-enhanced");
+      return await getAllTransactions();
     }),
 
   /**
@@ -79,8 +89,11 @@ export const adminRouter = router({
    */
   getTransactionDetails: adminProcedure
     .input(z.object({ transactionId: z.number() }))
-    .query(async ({ ctx, input }) => {
-      return null;
+    .query(async ({ input }) => {
+      const { getEscrowById } = await import("../db");
+      const escrow = await getEscrowById(input.transactionId);
+      if (!escrow) throw new TRPCError({ code: "NOT_FOUND", message: "Transaction not found" });
+      return escrow;
     }),
 
   /**
@@ -88,8 +101,9 @@ export const adminRouter = router({
    */
   listDisputes: adminProcedure
     .input(z.object({ limit: z.number().default(50), offset: z.number().default(0) }))
-    .query(async ({ ctx }) => {
-      return [];
+    .query(async () => {
+      const { getAllDisputes } = await import("../db-enhanced");
+      return await getAllDisputes();
     }),
 
   /**
@@ -124,8 +138,44 @@ export const adminRouter = router({
    */
   getAdminLogs: adminProcedure
     .input(z.object({ limit: z.number().default(50), offset: z.number().default(0) }))
-    .query(async ({ ctx }) => {
-      return [];
+    .query(async () => {
+      const { getAdminLogs } = await import("../db-enhanced");
+      return await getAdminLogs();
+    }),
+
+  /**
+   * التحقق من مستندات الهوية (KYC)
+   */
+  verifyKyc: adminProcedure
+    .input(z.object({
+      userId: z.number(),
+      status: z.enum(["verified", "rejected"]),
+      reason: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { updateUserKycStatus, createNotification } = await import("../db-enhanced");
+      
+      await updateUserKycStatus(input.userId, input.status);
+      
+      // Notify user
+      const title = input.status === "verified" ? "تم توثيق حسابك" : "فشل توثيق الحساب";
+      const message = input.status === "verified" 
+        ? "تهانينا! تم التحقق من هويتك بنجاح." 
+        : `نعتذر، تم رفض مستنداتك. السبب: ${input.reason || "المستندات غير واضحة"}`;
+        
+      await createNotification(input.userId, "system", title, message, "/dashboard/kyc");
+
+      // Log admin action
+      const { createAdminLog } = await import("../db");
+      await createAdminLog({
+        adminId: ctx.user.id,
+        action: "verify_kyc",
+        targetType: "user",
+        targetId: input.userId,
+        details: JSON.stringify({ status: input.status, reason: input.reason }),
+      });
+
+      return { success: true };
     }),
 
   /**

@@ -580,3 +580,67 @@ export async function getSuspiciousActivities() {
   // يمكن توسيعها لاحقاً لتشمل كشف محاولات الاحتيال والهجمات
   return [];
 }
+
+/**
+ * الحصول على جميع النزاعات مع إمكانية التصفية
+ */
+export async function getAllDisputes(options?: {
+  status?: "open" | "resolved" | "closed";
+  limit?: number;
+  offset?: number;
+}) {
+  const db = await getDb();
+  if (!db) return [];
+
+  let query = db.select().from(disputes);
+
+  if (options?.status) {
+    query = query.where(eq(disputes.status, options.status));
+  }
+
+  return await query
+    .orderBy(desc(disputes.createdAt))
+    .limit(options?.limit || 50)
+    .offset(options?.offset || 0);
+}
+
+/**
+ * الحصول على سجلات الإدارة
+ */
+export async function getAdminLogs(options?: {
+  limit?: number;
+  offset?: number;
+}) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(adminLogs)
+    .orderBy(desc(adminLogs.createdAt))
+    .limit(options?.limit || 50)
+    .offset(options?.offset || 0);
+}
+
+/**
+ * الحصول على جميع المعاملات (Escrows) للإدارة
+ */
+export async function getAllTransactions(options?: {
+  status?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const db = await getDb();
+  if (!db) return [];
+
+  let query = db.select().from(escrows);
+
+  if (options?.status) {
+    query = query.where(eq(escrows.status, options.status as any));
+  }
+
+  return await query
+    .orderBy(desc(escrows.createdAt))
+    .limit(options?.limit || 50)
+    .offset(options?.offset || 0);
+}
