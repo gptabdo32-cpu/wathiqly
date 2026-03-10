@@ -51,14 +51,21 @@ async function startServer() {
     if (protectedMethods.includes(req.method)) {
       const csrfHeader = req.headers["x-trpc-source"] || req.headers["x-requested-with"];
       const origin = req.headers["origin"];
+      const referer = req.headers["referer"];
       
-      // Verify custom header and basic origin check
+      // 1. Verify custom header (standard for SPA/tRPC)
       if (!csrfHeader) {
-        return res.status(403).json({ error: "Security Policy: Missing required authentication header" });
+        return res.status(403).json({ error: "Security Policy: Missing required authentication header (CSRF Protection)" });
       }
       
-      if (process.env.NODE_ENV === "production" && origin && !origin.includes(req.headers["host"] as string)) {
-        return res.status(403).json({ error: "Security Policy: Origin mismatch" });
+      // 2. Strict Origin/Referer check in production
+      if (process.env.NODE_ENV === "production") {
+        const host = req.headers["host"];
+        const target = origin || referer;
+        
+        if (!target || (host && !target.includes(host))) {
+          return res.status(403).json({ error: "Security Policy: Origin mismatch or missing (CSRF Protection)" });
+        }
       }
     }
     next();
