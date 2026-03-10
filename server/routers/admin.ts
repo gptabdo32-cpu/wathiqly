@@ -102,18 +102,21 @@ export const adminRouter = router({
       decision: z.enum(["buyer", "seller", "split"]),
     }))
     .mutation(async ({ ctx, input }) => {
-      // Log the action
-      await createAdminLog({
-        adminId: ctx.user.id,
-        action: "resolve_dispute",
-        targetType: "dispute",
-        targetId: input.disputeId,
-        details: JSON.stringify({ 
-          resolution: input.resolution,
-          decision: input.decision 
-        }),
-      });
-      return { success: true };
+      try {
+        const { resolveDispute } = await import("../db");
+        await resolveDispute(
+          input.disputeId,
+          ctx.user.id,
+          input.decision,
+          input.resolution
+        );
+        return { success: true };
+      } catch (error: any) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: error.message || "Failed to resolve dispute",
+        });
+      }
     }),
 
   /**

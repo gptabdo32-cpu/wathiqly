@@ -391,6 +391,141 @@ export async function getAdminStats() {
   };
 }
 
+export async function resolveDispute(
+  escrowId: number,
+  adminId: number,
+  decision: "buyer" | "seller" | "split",
+  resolution: string
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return await db.transaction(async (tx) => {
+    const [escrow] = await tx
+      .select()
+      .from(escrows)
+      .where(eq(escrows.id, escrowId))
+      .limit(1)
+      .for("update");
+
+    if (!escrow) throw new Error("Escrow not found");
+    if (escrow.status !== "disputed") throw new Error("Escrow is not in disputed status");
+
+    const amount = new Decimal(escrow.amount);
+    const commission = new Decimal(escrow.commissionAmount);
+
+    if (decision === "buyer") {
+      // Refund buyer (amount + commission if buyer paid it)
+      const refundAmount = escrow.commissionPaidBy === "buyer" 
+        ? amount.plus(commission).toFixed(2) 
+        : amount.toFixed(2);
+      
+      const [wallet] = await tx.select().from(wallets).where(eq(wallets.userId, escrow.buyerId)).limit(1).for("update");
+      if (wallet) {
+        await tx.update(wallets)
+          .set({ balance: new Decimal(wallet.balance).plus(refundAmount).toFixed(2) })
+          .where(eq(wallets.id, wallet.id));
+      }
+
+      await tx.insert(transactions).values({
+        userId: escrow.buyerId,
+        type: "refund",
+        amount: refundAmount,
+        status: "completed",
+        escrowId,
+        description: `Dispute resolved in favor of buyer. Full refund issued.`,
+      } as any);
+
+    } else if (decision === "seller") {
+      // Release to seller (amount - commission if seller paid it)
+      const releaseAmount = escrow.commissionPaidBy === "seller" 
+        ? amount.minus(commission).toFixed(2) 
+        : amount.toFixed(2);
+
+      const [wallet] = await tx.select().from(wallets).where(eq(wallets.userId, escrow.sellerId)).limit(1).for("update");
+      if (wallet) {
+        await tx.update(wallets)
+          .set({ 
+            balance: new Decimal(wallet.balance).plus(releaseAmount).toFixed(2),
+            totalEarned: new Decimal(wallet.totalEarned).plus(releaseAmount).toFixed(2)
+          })
+          .where(eq(wallets.id, wallet.id));
+      }
+
+      await tx.insert(transactions).values({
+        userId: escrow.sellerId,
+        type: "deposit",
+        amount: releaseAmount,
+        status: "completed",
+        escrowId,
+        description: `Dispute resolved in favor of seller. Funds released.`,
+      } as any);
+
+    } else if (decision === "split") {
+      // Split 50/50
+      const splitAmount = amount.div(2).toFixed(2);
+      
+      // Buyer part
+      const [bWallet] = await tx.select().from(wallets).where(eq(wallets.userId, escrow.buyerId)).limit(1).for("update");
+      if (bWallet) {
+        await tx.update(wallets)
+          .set({ balance: new Decimal(bWallet.balance).plus(splitAmount).toFixed(2) })
+          .where(eq(wallets.id, bWallet.id));
+      }
+
+      // Seller part
+      const [sWallet] = await tx.select().from(wallets).where(eq(wallets.userId, escrow.sellerId)).limit(1).for("update");
+      if (sWallet) {
+        await tx.update(wallets)
+          .set({ 
+            balance: new Decimal(sWallet.balance).plus(splitAmount).toFixed(2),
+            totalEarned: new Decimal(sWallet.totalEarned).plus(splitAmount).toFixed(2)
+          })
+          .where(eq(wallets.id, sWallet.id));
+      }
+
+      await tx.insert(transactions).values({
+        userId: escrow.buyerId,
+        type: "refund",
+        amount: splitAmount,
+        status: "completed",
+        escrowId,
+        description: `Dispute resolved with split decision. 50% refund issued.`,
+      } as any);
+
+      await tx.insert(transactions).values({
+        userId: escrow.sellerId,
+        type: "deposit",
+        amount: splitAmount,
+        status: "completed",
+        escrowId,
+        description: `Dispute resolved with split decision. 50% funds released.`,
+      } as any);
+    }
+
+    // Update escrow status
+    await tx.update(escrows)
+      .set({ 
+        status: "completed", 
+        disputeResolution: resolution,
+        disputeResolvedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(escrows.id, escrowId));
+
+    // Log admin action
+    await tx.insert(adminLogs).values({
+      adminId,
+      action: "resolve_dispute",
+      targetType: "escrow",
+      targetId: escrowId,
+      details: JSON.stringify({ decision, resolution }),
+    });
+
+    return { success: true };
+  });
+}
+
 export async function updateUserProfile(id: number, profile: Partial<InsertUser>) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
