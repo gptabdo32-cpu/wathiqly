@@ -51,10 +51,8 @@ export async function updateWalletBalance(
   operation: "add" | "subtract"
 ) {
   const db = await getDb(); if (!db) throw new Error("Database not available"); return await db.transaction(async (tx) => {
-    // Get current wallet
-    const wallet = await tx.query.wallets.findFirst({
-      where: eq(wallets.userId, userId),
-    });
+    // Get current wallet with FOR UPDATE lock to prevent race conditions
+    const [wallet] = await tx.select().from(wallets).where(eq(wallets.userId, userId)).limit(1).for("update");
 
     if (!wallet) {
       throw new Error("Wallet not found");
@@ -94,10 +92,8 @@ export async function updateWalletBalance(
  */
 export async function processEscrowCompletion(escrowId: number) {
   const db = await getDb(); if (!db) throw new Error("Database not available"); return await db.transaction(async (tx) => {
-    // Get escrow details
-    const escrow = await tx.query.escrows.findFirst({
-      where: eq(escrows.id, escrowId),
-    });
+    // Get escrow details with FOR UPDATE lock
+    const [escrow] = await tx.select().from(escrows).where(eq(escrows.id, escrowId)).limit(1).for("update");
 
     if (!escrow) {
       throw new Error("Escrow not found");
@@ -107,19 +103,11 @@ export async function processEscrowCompletion(escrowId: number) {
       throw new Error("Escrow is not in delivered status");
     }
 
-    // Deduct commission from buyer's wallet
-    const buyerWallet = await tx.query.wallets.findFirst({
-      where: eq(wallets.userId, escrow.buyerId),
-    });
+    // Get wallets with FOR UPDATE lock to prevent race conditions
+    const [buyerWallet] = await tx.select().from(wallets).where(eq(wallets.userId, escrow.buyerId)).limit(1).for("update");
+    if (!buyerWallet) throw new Error("Buyer wallet not found");
 
-    if (!buyerWallet) {
-      throw new Error("Buyer wallet not found");
-    }
-
-    // Transfer amount to seller
-    const sellerWallet = await tx.query.wallets.findFirst({
-      where: eq(wallets.userId, escrow.sellerId),
-    });
+    const [sellerWallet] = await tx.select().from(wallets).where(eq(wallets.userId, escrow.sellerId)).limit(1).for("update");
 
     if (!sellerWallet) {
       throw new Error("Seller wallet not found");
