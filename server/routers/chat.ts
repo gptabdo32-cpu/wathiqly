@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { fileTypeFromBuffer } from "file-type";
 
 const ALLOWED_IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 const ALLOWED_AUDIO_MIME_TYPES = ["audio/mpeg", "audio/wav", "audio/ogg"];
@@ -163,10 +164,20 @@ export const chatRouter = router({
         if (!conversation || (conversation.buyerId !== ctx.user.id && conversation.sellerId !== ctx.user.id)) {
           throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
         }
-        // Upload image to S3
+
+        // Validate file content
         const buffer = Buffer.from(input.imageData, "base64");
+        const type = await fileTypeFromBuffer(buffer);
+        if (!type || !ALLOWED_IMAGE_MIME_TYPES.includes(type.mime)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Invalid image file content",
+          });
+        }
+
+        // Upload image to S3
         const fileKey = `chat-images/${ctx.user.id}-${Date.now()}-${input.fileName}`;
-        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+        const { url } = await storagePut(fileKey, buffer, type.mime);
 
         // Create message with image
         const result = await createMessage({
@@ -208,10 +219,20 @@ export const chatRouter = router({
         if (!conversation || (conversation.buyerId !== ctx.user.id && conversation.sellerId !== ctx.user.id)) {
           throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
         }
-        // Upload audio to S3
+
+        // Validate file content
         const buffer = Buffer.from(input.audioData, "base64");
+        const type = await fileTypeFromBuffer(buffer);
+        if (!type || !ALLOWED_AUDIO_MIME_TYPES.includes(type.mime)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Invalid audio file content",
+          });
+        }
+
+        // Upload audio to S3
         const fileKey = `chat-audio/${ctx.user.id}-${Date.now()}-${input.fileName}`;
-        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+        const { url } = await storagePut(fileKey, buffer, type.mime);
 
         // Create message with audio
         const result = await createMessage({
