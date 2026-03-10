@@ -12,6 +12,7 @@ import {
   getUserConversations,
   createMessage,
   getConversationMessages,
+  getMessageById,
   markMessageAsRead,
   deleteMessage,
   addMessageReaction,
@@ -53,7 +54,9 @@ export const chatRouter = router({
   // Get user conversations
   getConversations: protectedProcedure.query(async ({ ctx }) => {
     try {
-      return await getUserConversations(ctx.user.id);
+      const conversations = await getUserConversations(ctx.user.id);
+      // Ensure only conversations where the user is buyer or seller are returned
+      return conversations.filter(c => c.buyerId === ctx.user.id || c.sellerId === ctx.user.id);
     } catch (error) {
       throw new TRPCError({
         code: "INTERNAL_SERVER_ERROR",
