@@ -205,6 +205,14 @@ export const timedLinksRouter = router({
         });
       }
 
+      // Prevent seller from using their own link
+      if (link.createdBy === ctx.user.id) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "You cannot use your own timed link",
+        });
+      }
+
       // Verify seller exists
       const seller = await getUserById(link.createdBy);
       if (!seller) {
