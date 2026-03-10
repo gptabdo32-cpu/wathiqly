@@ -117,12 +117,22 @@ export const chatRouter = router({
     .input(
       z.object({
         conversationId: z.number(),
-        content: z.string().min(1),
+        content: z.string().min(1).max(2000, "Message too long"),
         isEncrypted: z.boolean().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       try {
+        // Simple rate limiting check (can be improved with Redis/Memory cache)
+        const recentMessages = await getConversationMessages(input.conversationId, 5, 0);
+        const userRecentMessages = recentMessages.filter(m => m.senderId === ctx.user.id);
+        if (userRecentMessages.length >= 5) {
+          const lastMessageTime = new Date(userRecentMessages[0].createdAt).getTime();
+          if (Date.now() - lastMessageTime < 5000) { // 5 messages in 5 seconds
+            throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Slow down! You're sending messages too fast." });
+          }
+        }
+
         const conversation = await getConversation(input.conversationId);
         if (!conversation || (conversation.buyerId !== ctx.user.id && conversation.sellerId !== ctx.user.id)) {
           throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
