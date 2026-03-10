@@ -302,34 +302,35 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
-        const escrow = await getEscrowById(input.escrowId);
-
-        if (!escrow) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Transaction not found",
-          });
-        }
-
-        if (escrow.buyerId !== ctx.user.id) {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "Only the buyer can deposit funds",
-          });
-        }
-
-        if (escrow.status !== "draft") {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Transaction is not in draft status",
-          });
-        }
-
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
 
         try {
-          await db.transaction(async (tx) => {
+          return await db.transaction(async (tx) => {
+            // Lock the escrow row for update to prevent race conditions
+            const [escrow] = await tx.select().from(escrows).where(eq(escrows.id, input.escrowId)).limit(1).for("update");
+
+            if (!escrow) {
+              throw new TRPCError({
+                code: "NOT_FOUND",
+                message: "Transaction not found",
+              });
+            }
+
+            if (escrow.buyerId !== ctx.user.id) {
+              throw new TRPCError({
+                code: "FORBIDDEN",
+                message: "Only the buyer can deposit funds",
+              });
+            }
+
+            if (escrow.status !== "draft") {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: `Transaction is in ${escrow.status} status, expected draft`,
+              });
+            }
+
             // Update escrow status to funded
             await tx.update(escrows).set({ status: "funded", fundedAt: new Date() }).where(eq(escrows.id, input.escrowId));
 
@@ -343,10 +344,11 @@ export const appRouter = router({
               description: `Escrow deposit for transaction ${input.escrowId}`,
               reference: input.transactionProof,
             } as any);
-          });
 
-          return { success: true };
+            return { success: true };
+          });
         } catch (error) {
+          if (error instanceof TRPCError) throw error;
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to process deposit",
@@ -357,42 +359,44 @@ export const appRouter = router({
     confirmDelivery: protectedProcedure
       .input(z.object({ escrowId: z.number() }))
       .mutation(async ({ ctx, input }) => {
-        const escrow = await getEscrowById(input.escrowId);
-
-        if (!escrow) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Transaction not found",
-          });
-        }
-
-        if (escrow.buyerId !== ctx.user.id) {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "Only the buyer can confirm delivery",
-          });
-        }
-
-        if (escrow.status !== "delivered") {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Transaction is not in delivered status",
-          });
-        }
-
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
 
         try {
-          await db.transaction(async (tx) => {
+          return await db.transaction(async (tx) => {
+            // Lock the escrow row for update
+            const [escrow] = await tx.select().from(escrows).where(eq(escrows.id, input.escrowId)).limit(1).for("update");
+
+            if (!escrow) {
+              throw new TRPCError({
+                code: "NOT_FOUND",
+                message: "Transaction not found",
+              });
+            }
+
+            if (escrow.buyerId !== ctx.user.id) {
+              throw new TRPCError({
+                code: "FORBIDDEN",
+                message: "Only the buyer can confirm delivery",
+              });
+            }
+
+            if (escrow.status !== "delivered") {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: `Transaction is in ${escrow.status} status, expected delivered`,
+              });
+            }
+
             // Update escrow status to completed
             await tx.update(escrows).set({ status: "completed", completedAt: new Date() }).where(eq(escrows.id, input.escrowId));
 
             // Calculate amount to release to seller (total - commission)
             const releaseAmount = (parseFloat(escrow.amount) - parseFloat(escrow.commissionAmount)).toFixed(2);
 
-            // Update seller wallet
-            const [sellerWallet] = await tx.select().from(wallets).where(eq(wallets.userId, escrow.sellerId)).limit(1);
+            // Update seller wallet with lock
+            const [sellerWallet] = await tx.select().from(wallets).where(eq(wallets.userId, escrow.sellerId)).limit(1).for("update");
+            
             if (sellerWallet) {
               const newBalance = (parseFloat(sellerWallet.balance) + parseFloat(releaseAmount)).toFixed(2);
               const newTotalEarned = (parseFloat(sellerWallet.totalEarned) + parseFloat(releaseAmount)).toFixed(2);
@@ -416,10 +420,11 @@ export const appRouter = router({
               escrowId: input.escrowId,
               description: `Escrow release for transaction ${input.escrowId}`,
             } as any);
-          });
 
-          return { success: true };
+            return { success: true };
+          });
         } catch (error) {
+          if (error instanceof TRPCError) throw error;
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to confirm delivery and release funds",
