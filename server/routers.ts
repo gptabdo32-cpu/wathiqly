@@ -130,16 +130,16 @@ export const appRouter = router({
 
         try {
           return await db.transaction(async (tx) => {
-            // Get wallet with lock if possible (Drizzle doesn't support FOR UPDATE easily in all dialects, but transaction helps)
-            const [wallet] = await tx.select().from(wallets).where(eq(wallets.userId, ctx.user.id)).limit(1);
+            // Get wallet with FOR UPDATE lock to prevent race conditions
+            const [wallet] = await tx.select().from(wallets).where(eq(wallets.userId, ctx.user.id)).limit(1).for("update");
             
             if (!wallet) {
               throw new TRPCError({ code: "NOT_FOUND", message: "Wallet not found" });
             }
 
             // Validate balance
-            const availableBalance = parseFloat(wallet.balance);
-            const requestedAmount = parseFloat(input.amount);
+            const availableBalance = Number(wallet.balance);
+            const requestedAmount = Number(input.amount);
 
             if (requestedAmount > availableBalance) {
               throw new TRPCError({
@@ -150,7 +150,7 @@ export const appRouter = router({
 
             // 1. Deduct from balance and move to pending
             const newBalance = (availableBalance - requestedAmount).toFixed(2);
-            const newPendingBalance = (parseFloat(wallet.pendingBalance) + requestedAmount).toFixed(2);
+            const newPendingBalance = (Number(wallet.pendingBalance) + requestedAmount).toFixed(2);
 
             await tx.update(wallets)
               .set({ 
@@ -232,7 +232,7 @@ export const appRouter = router({
 
         // Create escrow
         const commissionAmount = (
-          parseFloat(input.amount) *
+          Number(input.amount) *
           (parseFloat(input.commissionPercentage) / 100)
         ).toFixed(2);
 
