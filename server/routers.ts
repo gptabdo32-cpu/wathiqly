@@ -592,23 +592,58 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
-        // TODO: Implement payment processing
-        const startDate = new Date();
-        const endDate = new Date(startDate);
-        endDate.setMonth(endDate.getMonth() + input.durationMonths);
+        // Security: Verify user has enough balance for the subscription
+        const wallet = await getOrCreateWallet(ctx.user.id);
+        const totalPrice = new Decimal(input.monthlyPrice).mul(input.durationMonths);
+        
+        if (new Decimal(wallet.balance).lt(totalPrice)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Insufficient balance to subscribe to this plan",
+          });
+        }
 
-        const result = await createTrustedSellerSubscription({
-          userId: ctx.user.id,
-          planName: input.planName,
-          monthlyPrice: input.monthlyPrice,
-          startDate,
-          endDate,
-          isActive: true,
-          autoRenew: true,
-          benefits: ["featured_listing", "priority_support", "badge"],
+        // Process payment: Deduct from wallet
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+
+        return await db.transaction(async (tx) => {
+          const [lockedWallet] = await tx.select().from(wallets).where(eq(wallets.userId, ctx.user.id)).limit(1).for("update");
+          
+          if (new Decimal(lockedWallet.balance).lt(totalPrice)) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "Insufficient balance" });
+          }
+
+          const newBalance = new Decimal(lockedWallet.balance).minus(totalPrice).toFixed(2);
+          await tx.update(wallets).set({ balance: newBalance }).where(eq(wallets.id, lockedWallet.id));
+
+          // Create subscription
+          const startDate = new Date();
+          const endDate = new Date(startDate);
+          endDate.setMonth(endDate.getMonth() + input.durationMonths);
+
+          const [result] = await tx.insert(trustedSellerSubscriptions).values({
+            userId: ctx.user.id,
+            planName: input.planName,
+            monthlyPrice: input.monthlyPrice,
+            startDate,
+            endDate,
+            isActive: true,
+            autoRenew: true,
+            benefits: JSON.stringify(["featured_listing", "priority_support", "badge"]),
+          });
+
+          // Create transaction record
+          await tx.insert(transactions).values({
+            userId: ctx.user.id,
+            type: "withdrawal",
+            amount: totalPrice.toFixed(2),
+            status: "completed",
+            description: `Subscription to ${input.planName} plan for ${input.durationMonths} months`,
+          } as any);
+
+          return { success: true, subscriptionId: result.insertId };
         });
-
-        return { success: true, subscriptionId: result[0].insertId };
       }),
 
     getActiveSubscription: protectedProcedure.query(async ({ ctx }) => {
