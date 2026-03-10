@@ -28,6 +28,7 @@ import {
   updateUserProfile,
 } from "./db";
 import { adminRouter } from "./routers/admin";
+import { encryptData } from "./_core/encryption";
 import { chatRouter } from "./routers/chat";
 import { eq } from "drizzle-orm";
 import { desc } from "drizzle-orm";
@@ -120,7 +121,7 @@ export const appRouter = router({
         z.object({
           amount: z.string().refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) > 0, { message: "Amount must be a positive number" }),
           paymentMethod: z.enum(["sadad", "tadawul", "edfaali", "bank_transfer"]),
-          paymentDetails: z.record(z.string(), z.any()), // TODO: Implement encryption for sensitive payment details before storing in production
+          paymentDetails: z.record(z.string(), z.any()),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -142,7 +143,7 @@ export const appRouter = router({
           userId: ctx.user.id,
           amount: input.amount,
           paymentMethod: input.paymentMethod,
-          paymentDetails: input.paymentDetails,
+          paymentDetails: encryptData(JSON.stringify(input.paymentDetails)),
           status: "pending",
         });
 
