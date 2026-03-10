@@ -10,6 +10,8 @@ import {
   notifications,
 } from "../drizzle/schema";
 import { encryptData, decryptData } from "./_core/encryption";
+import { Decimal } from "decimal.js";
+import { TRPCError } from "@trpc/server";
 
 /**
  * Create a transaction record for financial operations
@@ -58,26 +60,31 @@ export async function updateWalletBalance(
       throw new Error("Wallet not found");
     }
 
-    const currentBalance = parseFloat(wallet.balance);
-    const change = parseFloat(amountChange);
+    const currentBalance = new Decimal(wallet.balance);
+    const change = new Decimal(amountChange);
 
     let newBalance = currentBalance;
     if (operation === "add") {
-      newBalance = currentBalance + change;
+      newBalance = currentBalance.plus(change);
     } else if (operation === "subtract") {
-      if (currentBalance < change) {
-        throw new Error("Insufficient balance");
+      if (currentBalance.lt(change)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Insufficient balance",
+        });
       }
-      newBalance = currentBalance - change;
+      newBalance = currentBalance.minus(change);
     }
+
+    const finalBalance = newBalance.toFixed(2);
 
     // Update wallet
     await tx.update(wallets).set({
-      balance: newBalance.toFixed(2),
+      balance: finalBalance,
       updatedAt: new Date(),
     }).where(eq(wallets.id, wallet.id));
 
-    return newBalance.toFixed(2);
+    return finalBalance;
   });
 }
 
@@ -118,14 +125,17 @@ export async function processEscrowCompletion(escrowId: number) {
       throw new Error("Seller wallet not found");
     }
 
-    const amount = parseFloat(escrow.amount);
-    const commission = parseFloat(escrow.commissionAmount);
-    const sellerAmount = amount - commission;
+    const amount = new Decimal(escrow.amount);
+    const commission = new Decimal(escrow.commissionAmount);
+    const sellerAmount = amount.minus(commission);
 
     // Update seller wallet
+    const currentSellerBalance = new Decimal(sellerWallet.balance);
+    const currentTotalEarned = new Decimal(sellerWallet.totalEarned);
+    
     await tx.update(wallets).set({
-      balance: (parseFloat(sellerWallet.balance) + sellerAmount).toFixed(2),
-      totalEarned: (parseFloat(sellerWallet.totalEarned) + sellerAmount).toFixed(2),
+      balance: currentSellerBalance.plus(sellerAmount).toFixed(2),
+      totalEarned: currentTotalEarned.plus(sellerAmount).toFixed(2),
       updatedAt: new Date(),
     }).where(eq(wallets.id, sellerWallet.id));
 
@@ -145,7 +155,7 @@ export async function processEscrowCompletion(escrowId: number) {
       referenceId: escrowId,
       description: `Payment received for escrow: ${escrow.title}`,
       status: "completed",
-    });
+    } as any);
 
     await tx.insert(transactions).values({
       userId: escrow.buyerId,
@@ -155,7 +165,7 @@ export async function processEscrowCompletion(escrowId: number) {
       referenceId: escrowId,
       description: `Commission for escrow: ${escrow.title}`,
       status: "completed",
-    });
+    } as any);
 
     return { success: true, sellerAmount: sellerAmount.toFixed(2) };
   });
