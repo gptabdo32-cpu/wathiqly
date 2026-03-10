@@ -1,4 +1,7 @@
 import { z } from "zod";
+
+const ALLOWED_IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+const ALLOWED_AUDIO_MIME_TYPES = ["audio/mpeg", "audio/wav", "audio/ogg"];
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../_core/trpc";
 import {
@@ -134,6 +137,7 @@ export const chatRouter = router({
         conversationId: z.number(),
         imageData: z.string(), // Base64 encoded image
         fileName: z.string(),
+        mimeType: z.string().refine(val => ALLOWED_IMAGE_MIME_TYPES.includes(val), { message: "Unsupported image MIME type" }),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -141,7 +145,7 @@ export const chatRouter = router({
         // Upload image to S3
         const buffer = Buffer.from(input.imageData, "base64");
         const fileKey = `chat-images/${ctx.user.id}-${Date.now()}-${input.fileName}`;
-        const { url } = await storagePut(fileKey, buffer, "image/jpeg");
+        const { url } = await storagePut(fileKey, buffer, input.mimeType);
 
         // Create message with image
         const result = await createMessage({
@@ -149,7 +153,7 @@ export const chatRouter = router({
           senderId: ctx.user.id,
           messageType: "image",
           mediaUrl: url,
-          mediaType: "image/jpeg",
+          mediaType: input.mimeType,
         });
 
         return {
@@ -173,6 +177,7 @@ export const chatRouter = router({
         audioData: z.string(), // Base64 encoded audio
         duration: z.number(), // Duration in seconds
         fileName: z.string(),
+        mimeType: z.string().refine(val => ALLOWED_AUDIO_MIME_TYPES.includes(val), { message: "Unsupported audio MIME type" }),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -180,7 +185,7 @@ export const chatRouter = router({
         // Upload audio to S3
         const buffer = Buffer.from(input.audioData, "base64");
         const fileKey = `chat-audio/${ctx.user.id}-${Date.now()}-${input.fileName}`;
-        const { url } = await storagePut(fileKey, buffer, "audio/mp3");
+        const { url } = await storagePut(fileKey, buffer, input.mimeType);
 
         // Create message with audio
         const result = await createMessage({
@@ -188,7 +193,7 @@ export const chatRouter = router({
           senderId: ctx.user.id,
           messageType: "audio",
           mediaUrl: url,
-          mediaType: "audio/mp3",
+          mediaType: input.mimeType,
           mediaDuration: input.duration,
         });
 
