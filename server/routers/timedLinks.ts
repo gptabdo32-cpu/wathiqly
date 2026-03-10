@@ -151,6 +151,14 @@ export const timedLinksRouter = router({
         });
       }
 
+      // Security Check: If the link is private/used, only the seller or the buyer who used it can see details
+      if (link.isUsed && link.usedBy !== ctx.user.id && link.createdBy !== ctx.user.id) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You don't have permission to view this used link",
+        });
+      }
+
       // Get seller info
       const seller = await getUserById(link.createdBy);
 
@@ -164,6 +172,7 @@ export const timedLinksRouter = router({
         commissionPercentage: link.commissionPercentage,
         commissionPaidBy: link.commissionPaidBy,
         expiresAt: link.expiresAt,
+        status: link.status,
         seller: {
           id: seller?.id,
           name: seller?.name,
