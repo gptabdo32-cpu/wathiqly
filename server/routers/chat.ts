@@ -63,11 +63,18 @@ export const chatRouter = router({
   // Get conversation details
   getConversation: protectedProcedure
     .input(z.object({ conversationId: z.number() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
       try {
-        const result = await getConversation(input.conversationId);
-        return result[0] || null;
+        const conversation = await getConversation(input.conversationId);
+        if (!conversation) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Conversation not found" });
+        }
+        if (conversation.buyerId !== ctx.user.id && conversation.sellerId !== ctx.user.id) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
+        }
+        return conversation;
       } catch (error) {
+        if (error instanceof TRPCError) throw error;
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to fetch conversation",
@@ -84,14 +91,19 @@ export const chatRouter = router({
         offset: z.number().default(0),
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
       try {
+        const conversation = await getConversation(input.conversationId);
+        if (!conversation || (conversation.buyerId !== ctx.user.id && conversation.sellerId !== ctx.user.id)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
+        }
         return await getConversationMessages(
           input.conversationId,
           input.limit,
           input.offset
         );
       } catch (error) {
+        if (error instanceof TRPCError) throw error;
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to fetch messages",
@@ -110,6 +122,10 @@ export const chatRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       try {
+        const conversation = await getConversation(input.conversationId);
+        if (!conversation || (conversation.buyerId !== ctx.user.id && conversation.sellerId !== ctx.user.id)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
+        }
         const result = await createMessage({
           conversationId: input.conversationId,
           senderId: ctx.user.id,
@@ -123,6 +139,7 @@ export const chatRouter = router({
           messageId: result[0].insertId,
         };
       } catch (error) {
+        if (error instanceof TRPCError) throw error;
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to send message",
@@ -142,6 +159,10 @@ export const chatRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       try {
+        const conversation = await getConversation(input.conversationId);
+        if (!conversation || (conversation.buyerId !== ctx.user.id && conversation.sellerId !== ctx.user.id)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
+        }
         // Upload image to S3
         const buffer = Buffer.from(input.imageData, "base64");
         const fileKey = `chat-images/${ctx.user.id}-${Date.now()}-${input.fileName}`;
@@ -162,6 +183,7 @@ export const chatRouter = router({
           imageUrl: url,
         };
       } catch (error) {
+        if (error instanceof TRPCError) throw error;
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to send image",
@@ -182,6 +204,10 @@ export const chatRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       try {
+        const conversation = await getConversation(input.conversationId);
+        if (!conversation || (conversation.buyerId !== ctx.user.id && conversation.sellerId !== ctx.user.id)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
+        }
         // Upload audio to S3
         const buffer = Buffer.from(input.audioData, "base64");
         const fileKey = `chat-audio/${ctx.user.id}-${Date.now()}-${input.fileName}`;
@@ -203,6 +229,7 @@ export const chatRouter = router({
           audioUrl: url,
         };
       } catch (error) {
+        if (error instanceof TRPCError) throw error;
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to send audio",
