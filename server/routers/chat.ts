@@ -3,6 +3,7 @@ import { fileTypeFromBuffer } from "file-type";
 
 const ALLOWED_IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 const ALLOWED_AUDIO_MIME_TYPES = ["audio/mpeg", "audio/wav", "audio/ogg"];
+const MAX_FILE_SIZE_MB = 10; // 10MB limit per file
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../_core/trpc";
 import {
@@ -175,8 +176,16 @@ export const chatRouter = router({
           throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
         }
 
-        // Validate file content
+        // Validate file size
         const buffer = Buffer.from(input.imageData, "base64");
+        if (buffer.length > MAX_FILE_SIZE_MB * 1024 * 1024) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `File size exceeds the ${MAX_FILE_SIZE_MB}MB limit`,
+          });
+        }
+
+        // Validate file content
         const type = await fileTypeFromBuffer(buffer);
         if (!type || !ALLOWED_IMAGE_MIME_TYPES.includes(type.mime)) {
           throw new TRPCError({
@@ -230,8 +239,16 @@ export const chatRouter = router({
           throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
         }
 
-        // Validate file content
+        // Validate file size
         const buffer = Buffer.from(input.audioData, "base64");
+        if (buffer.length > MAX_FILE_SIZE_MB * 1024 * 1024) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `File size exceeds the ${MAX_FILE_SIZE_MB}MB limit`,
+          });
+        }
+
+        // Validate file content
         const type = await fileTypeFromBuffer(buffer);
         if (!type || !ALLOWED_AUDIO_MIME_TYPES.includes(type.mime)) {
           throw new TRPCError({
