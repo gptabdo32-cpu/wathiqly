@@ -5,7 +5,11 @@ import crypto from "crypto";
  * Uses AES-256-GCM for authenticated encryption
  */
 
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || crypto.randomBytes(32).toString("hex");
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
+
+if (!ENCRYPTION_KEY) {
+  throw new Error("ENCRYPTION_KEY environment variable is not set. Please set a strong, persistent key for production.");
+}
 const ALGORITHM = "aes-256-gcm";
 
 /**
