@@ -602,3 +602,24 @@ export async function uploadAttachment(attachment: InsertChatAttachment) {
     handleDbError(error, "Failed to upload attachment");
   }
 }
+
+export async function hasCompletedTransaction(user1Id: number, user2Id: number) {
+  const db = await getDb();
+  if (!db) return false;
+
+  const result = await db
+    .select()
+    .from(escrows)
+    .where(
+      and(
+        or(
+          and(eq(escrows.buyerId, user1Id), eq(escrows.sellerId, user2Id)),
+          and(eq(escrows.buyerId, user2Id), eq(escrows.sellerId, user1Id))
+        ),
+        eq(escrows.status, "completed")
+      )
+    )
+    .limit(1);
+
+  return result.length > 0;
+}

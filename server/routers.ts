@@ -17,6 +17,7 @@ import {
   searchProducts,
   createReview,
   getUserReviews,
+  hasCompletedTransaction,
   createWithdrawalRequest,
   getUserWithdrawals,
   getPendingWithdrawals,
@@ -542,6 +543,15 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
+        // Security check: Ensure the reviewer has a completed transaction with the reviewee
+        const hasTransaction = await hasCompletedTransaction(ctx.user.id, input.revieweeId);
+        if (!hasTransaction) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "You can only review users you have had a completed transaction with",
+          });
+        }
+
         const result = await createReview({
           revieweeId: input.revieweeId,
           reviewerId: ctx.user.id,
