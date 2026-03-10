@@ -7,6 +7,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { limiter, authLimiter } from "./middleware";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -72,10 +73,13 @@ async function startServer() {
   });
 
   // OAuth callback under /api/oauth/callback
+  app.use("/api/oauth", authLimiter);
   registerOAuthRoutes(app);
-  // tRPC API
+
+  // tRPC API with global rate limiting
   app.use(
     "/api/trpc",
+    limiter,
     createExpressMiddleware({
       router: appRouter,
       createContext,
