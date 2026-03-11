@@ -16,6 +16,7 @@ import FAQ from './pages/FAQ';
 import Terms from './pages/Terms';
 import WalletManagement from './pages/WalletManagement';
 import Messaging from './pages/Messaging';
+import IdentityVerification from './pages/IdentityVerification';
 
 function Router() {
   return (
@@ -29,6 +30,7 @@ function Router() {
       <Route path={'/admin'} component={AdminDashboard} />
       <Route path={'/faq'} component={FAQ} />
       <Route path={'/messaging'} component={Messaging} />
+      <Route path={'/verify'} component={IdentityVerification} />
            <Route path={"/"} component={Home} />
       <Route path={"/wallet"} component={WalletManagement} />
       <Route path={"/404"} component={NotFound} />
