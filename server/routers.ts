@@ -30,6 +30,7 @@ import {
   updateUserProfile,
 } from "./db";
 import { adminRouter } from "./routers/admin";
+import { verificationRouter } from "./routers/verification";
 import { encryptData } from "./_core/encryption";
 import { Decimal } from "decimal.js";
 import { chatRouter } from "./routers/chat";
@@ -610,6 +611,7 @@ export const appRouter = router({
 
   // ============ TRUSTED SELLER OPERATIONS ============
   admin: adminRouter,
+  verify: verificationRouter,
   trustedSeller: router({
     subscribeToPlan: protectedProcedure
       .input(
