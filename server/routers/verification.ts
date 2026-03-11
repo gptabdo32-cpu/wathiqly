@@ -6,6 +6,15 @@ import { eq } from "drizzle-orm";
 import { generateOTP, sendSMS } from "../_core/utils";
 import { extractIdDataFromImage, validateExtractedData, sanitizeExtractedData } from "../_core/ocr";
 import { compareFaces, validateFaceComparison, calculateRiskScore } from "../_core/faceRecognition";
+import {
+  notifyPhoneVerificationSuccess,
+  notifyPhoneVerificationFailed,
+  notifyIdUploadSuccess,
+  notifyIdUploadFailed,
+  notifyFaceMatchSuccess,
+  notifyFaceMatchFailed,
+  notifyVerificationStatusUpdate,
+} from "../_core/verificationNotifications";
 
 
 export const verificationRouter = router({
@@ -53,6 +62,7 @@ export const verificationRouter = router({
       const storedUser = user[0];
 
       if (!storedUser.otpCode || !storedUser.otpExpiresAt) {
+        await notifyPhoneVerificationFailed(storedUser.id, "لم يتم إرسال رمز التحقق");
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "No OTP sent for this phone number.",
@@ -60,6 +70,7 @@ export const verificationRouter = router({
       }
 
       if (storedUser.otpExpiresAt < new Date()) {
+        await notifyPhoneVerificationFailed(storedUser.id, "انتهت صلاحية رمز التحقق");
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "OTP has expired.",
@@ -67,6 +78,7 @@ export const verificationRouter = router({
       }
 
       if (storedUser.otpCode !== otp) {
+        await notifyPhoneVerificationFailed(storedUser.id, "رمز التحقق غير صحيح");
         throw new TRPCError({
           code: "UNAUTHORIZED",
           message: "Invalid OTP.",
@@ -81,6 +93,10 @@ export const verificationRouter = router({
         otpExpiresAt: null,
         verificationLevel: 1, // Level 1: Phone verified
       }).where(eq(users.phone, phone));
+
+      // Send success notification
+      await notifyPhoneVerificationSuccess(storedUser.id, phone);
+      await notifyVerificationStatusUpdate(storedUser.id, 1);
 
       return { success: true, message: "Phone number verified successfully." };
     }),
@@ -145,6 +161,10 @@ export const verificationRouter = router({
 
       // Log sanitized data for audit purposes
       console.log(`[Verification] ID uploaded for user ${user.id}:`, sanitizeExtractedData(extractedData));
+
+      // Send success notification
+      await notifyIdUploadSuccess(user.id, extractedData.confidence);
+      await notifyVerificationStatusUpdate(user.id, 2);
 
       return { 
         success: true, 
@@ -221,6 +241,27 @@ export const verificationRouter = router({
         isVerified: identityVerified,
         warnings: faceComparisonResult.warnings,
       });
+
+      // Send appropriate notification
+      if (identityVerified) {
+        await notifyFaceMatchSuccess(
+          user.id,
+          faceComparisonResult.matchScore,
+          faceComparisonResult.livenessScore
+        );
+        await notifyVerificationStatusUpdate(user.id, 3);
+      } else {
+        const failureReason = !isValid
+          ? "Face matching validation failed"
+          : riskScore >= 30
+          ? "Risk score too high"
+          : "Unknown reason";
+        await notifyFaceMatchFailed(
+          user.id,
+          failureReason,
+          faceComparisonResult.warnings
+        );
+      }
 
       return {
         success: true,
