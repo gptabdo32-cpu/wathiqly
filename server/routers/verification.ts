@@ -14,7 +14,9 @@ import {
   notifyFaceMatchSuccess,
   notifyFaceMatchFailed,
   notifyVerificationStatusUpdate,
+  notifyVerificationFlagged,
 } from "../_core/verificationNotifications";
+import { assessFraudRisk, checkDuplicateNationalId, isSuspiciousFaceImage } from "../_core/fraudDetection";
 
 
 export const verificationRouter = router({
@@ -141,6 +143,15 @@ export const verificationRouter = router({
         });
       }
 
+      // 4b. Check for duplicate national ID in verification history
+      const duplicateCheck = await checkDuplicateNationalId(nationalIdNumberHash);
+      if (duplicateCheck && duplicateCheck !== user.id) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "This national ID has already been used for verification.",
+        });
+      }
+
       // 5. Store/update verification details
       await db.update(users).set({
         identityDocumentUrl: idCardImageUrl,
@@ -148,16 +159,31 @@ export const verificationRouter = router({
         verificationLevel: 2, // Level 2: ID uploaded
       }).where(eq(users.id, user.id));
 
+      // Assess fraud risk
+      const fraudAssessment = await assessFraudRisk(
+        user.id,
+        ctx.req.ip,
+        ctx.req.headers["user-agent"] as string
+      );
+
       // Also save to identity_verifications table for history/anti-fraud
       await db.insert(ctx.schema.identityVerifications).values({
         userId: user.id,
         nationalIdNumberHash: nationalIdNumberHash,
         fullName: extractedFullName,
         idCardImageUrl: idCardImageUrl,
-        status: "pending",
+        status: fraudAssessment.shouldReview ? "flagged" : "pending",
         ipAddress: ctx.req.ip,
         userAgent: ctx.req.headers["user-agent"],
       });
+
+      // Flag for review if fraud risk is high
+      if (fraudAssessment.shouldReview) {
+        await notifyVerificationFlagged(
+          user.id,
+          `Fraud risk detected: ${fraudAssessment.flags.map((f) => f.description).join(", ")}`
+        );
+      }
 
       // Log sanitized data for audit purposes
       console.log(`[Verification] ID uploaded for user ${user.id}:`, sanitizeExtractedData(extractedData));
@@ -213,6 +239,13 @@ export const verificationRouter = router({
         currentUser[0].selfieImageUrl
       );
 
+      // Check for suspicious face image (deepfake, manipulation, etc.)
+      const isSuspicious = isSuspiciousFaceImage(
+        faceComparisonResult.matchScore,
+        faceComparisonResult.livenessScore,
+        faceComparisonResult.warnings
+      );
+
       // Validate face comparison result
       const isValid = validateFaceComparison(faceComparisonResult);
       const riskScore = calculateRiskScore(faceComparisonResult);
@@ -220,7 +253,7 @@ export const verificationRouter = router({
       let identityVerified = false;
       let verificationLevel = currentUser[0].verificationLevel;
 
-      if (isValid && riskScore < 30) {
+      if (isValid && riskScore < 30 && !isSuspicious) {
         identityVerified = true;
         verificationLevel = 3; // Level 3: Fully verified
       }
@@ -251,11 +284,15 @@ export const verificationRouter = router({
         );
         await notifyVerificationStatusUpdate(user.id, 3);
       } else {
-        const failureReason = !isValid
-          ? "Face matching validation failed"
-          : riskScore >= 30
-          ? "Risk score too high"
-          : "Unknown reason";
+        let failureReason = "Unknown reason";
+        if (isSuspicious) {
+          failureReason = "Suspicious face image detected (possible manipulation or deepfake)";
+        } else if (!isValid) {
+          failureReason = "Face matching validation failed";
+        } else if (riskScore >= 30) {
+          failureReason = "Risk score too high";
+        }
+
         await notifyFaceMatchFailed(
           user.id,
           failureReason,
