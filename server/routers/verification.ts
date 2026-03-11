@@ -5,6 +5,7 @@ import { users } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { generateOTP, sendSMS } from "../_core/utils";
 import { extractIdDataFromImage, validateExtractedData, sanitizeExtractedData } from "../_core/ocr";
+import { compareFaces, validateFaceComparison, calculateRiskScore } from "../_core/faceRecognition";
 
 
 export const verificationRouter = router({
@@ -186,25 +187,54 @@ export const verificationRouter = router({
         });
       }
 
-      // Simulate face matching (replace with actual face recognition library)
-      const faceMatchScore = Math.floor(Math.random() * (100 - 80 + 1)) + 80; // Random score between 80-100
+      // Perform real face matching using AI Vision
+      const faceComparisonResult = await compareFaces(
+        currentUser[0].identityDocumentUrl,
+        currentUser[0].selfieImageUrl
+      );
+
+      // Validate face comparison result
+      const isValid = validateFaceComparison(faceComparisonResult);
+      const riskScore = calculateRiskScore(faceComparisonResult);
 
       let identityVerified = false;
       let verificationLevel = currentUser[0].verificationLevel;
 
-      if (faceMatchScore >= 90) {
+      if (isValid && riskScore < 30) {
         identityVerified = true;
         verificationLevel = 3; // Level 3: Fully verified
       }
 
+      // Update user verification status
       await db.update(users).set({
-        faceMatchScore: faceMatchScore,
+        faceMatchScore: faceComparisonResult.matchScore,
         isIdentityVerified: identityVerified,
         identityVerifiedAt: identityVerified ? new Date() : null,
         verificationLevel: verificationLevel,
       }).where(eq(users.id, user.id));
 
-      return { success: true, score: faceMatchScore, isVerified: identityVerified, message: "Face matching completed." };
+      // Log verification result
+      console.log(`[Verification] Face matching completed for user ${user.id}:`, {
+        matchScore: faceComparisonResult.matchScore,
+        confidence: faceComparisonResult.confidence,
+        riskScore,
+        isVerified: identityVerified,
+        warnings: faceComparisonResult.warnings,
+      });
+
+      return {
+        success: true,
+        score: faceComparisonResult.matchScore,
+        confidence: faceComparisonResult.confidence,
+        isVerified: identityVerified,
+        livenessScore: faceComparisonResult.livenessScore,
+        isLive: faceComparisonResult.isLive,
+        riskScore,
+        warnings: faceComparisonResult.warnings,
+        message: identityVerified
+          ? "Identity verified successfully!"
+          : "Face matching did not meet verification requirements. Please try again.",
+      };
     }),
 
   getStatus: protectedProcedure
