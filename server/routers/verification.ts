@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { users } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { generateOTP, sendSMS } from "../_core/utils";
+import { extractIdDataFromImage, validateExtractedData, sanitizeExtractedData } from "../_core/ocr";
 
 
 export const verificationRouter = router({
@@ -96,9 +97,19 @@ export const verificationRouter = router({
       const imageKey = `identity/${user.id}/id_card_${Date.now()}.png`;
       const { url: idCardImageUrl } = await ctx.storage.put(imageKey, imageBuffer, 'image/png');
 
-      // 2. Simulate OCR to extract data (replace with actual OCR service integration)
-      const extractedFullName = "John Doe"; // Placeholder
-      const extractedNationalIdNumber = "1234567890123"; // Placeholder
+      // 2. Extract data using real OCR service
+      const extractedData = await extractIdDataFromImage(idCardImageUrl);
+      
+      // Validate extracted data
+      if (!validateExtractedData(extractedData)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Could not reliably extract identity information. Please ensure the image is clear, well-lit, and shows all required information.",
+        });
+      }
+
+      const extractedFullName = extractedData.fullName;
+      const extractedNationalIdNumber = extractedData.nationalIdNumber;
 
       // 3. Encrypt national ID number
       const nationalIdNumberEncrypted = ctx.encryption.encryptData(extractedNationalIdNumber);
@@ -131,7 +142,15 @@ export const verificationRouter = router({
         userAgent: ctx.req.headers["user-agent"],
       });
 
-      return { success: true, message: "National ID uploaded successfully." };
+      // Log sanitized data for audit purposes
+      console.log(`[Verification] ID uploaded for user ${user.id}:`, sanitizeExtractedData(extractedData));
+
+      return { 
+        success: true, 
+        message: "National ID uploaded successfully.",
+        confidence: extractedData.confidence,
+        fullName: extractedFullName,
+      };
     }),
 
   uploadSelfie: protectedProcedure
