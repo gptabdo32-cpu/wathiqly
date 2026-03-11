@@ -39,6 +39,14 @@ export const users = mysqlTable("users", {
   identityVerifiedAt: timestamp("identityVerifiedAt"),
   phoneNumberVerifiedAt: timestamp("phoneNumberVerifiedAt"),
   
+  // Verification fields
+  verificationLevel: int("verificationLevel").default(0).notNull(), // 0: Not verified, 1: Phone, 2: ID, 3: Fully verified
+  nationalIdNumberEncrypted: text("nationalIdNumberEncrypted"), // AES-256 encrypted
+  selfieImageUrl: text("selfieImageUrl"),
+  faceMatchScore: decimal("faceMatchScore", { precision: 5, scale: 2 }),
+  otpCode: varchar("otpCode", { length: 6 }),
+  otpExpiresAt: timestamp("otpExpiresAt"),
+  
   // Trusted seller badge
   isTrustedSeller: boolean("isTrustedSeller").default(false),
   trustedSellerExpiresAt: timestamp("trustedSellerExpiresAt"),
@@ -566,3 +574,33 @@ export const auditLogs = mysqlTable("auditLogs", {
 
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = typeof auditLogs.$inferInsert;
+
+/**
+ * Identity Verifications table - tracks verification attempts and prevents fraud
+ */
+export const identityVerifications = mysqlTable("identity_verifications", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  
+  // Verification details
+  nationalIdNumberHash: varchar("nationalIdNumberHash", { length: 64 }).notNull().unique(), // SHA-256 hash for uniqueness check
+  fullName: text("fullName"),
+  idCardImageUrl: text("idCardImageUrl"),
+  selfieImageUrl: text("selfieImageUrl"),
+  
+  // Status and results
+  status: mysqlEnum("status", ["pending", "approved", "rejected", "flagged"]).default("pending").notNull(),
+  faceMatchScore: decimal("faceMatchScore", { precision: 5, scale: 2 }),
+  rejectionReason: text("rejectionReason"),
+  
+  // Anti-fraud
+  attemptCount: int("attemptCount").default(1).notNull(),
+  ipAddress: varchar("ipAddress", { length: 45 }),
+  userAgent: text("userAgent"),
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type IdentityVerification = typeof identityVerifications.$inferSelect;
+export type InsertIdentityVerification = typeof identityVerifications.$inferInsert;
