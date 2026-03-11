@@ -13,13 +13,14 @@
 - [x] دعم تشفير رقم الهوية الوطنية (AES-256).
 - [x] تم رفع التعديلات على GitHub.
 
-### 2. العمليات الخلفية (Backend APIs) ⏳
-- [ ] تنفيذ `POST /api/verify/send-otp` (إرسال رمز التحقق).
-- [ ] تنفيذ `POST /api/verify/check-otp` (تأكيد رمز التحقق).
-- [ ] تنفيذ `POST /api/verify/upload-id` (رفع الهوية + OCR).
-- [ ] تنفيذ `POST /api/verify/upload-selfie` (رفع السيلفي).
-- [ ] تنفيذ `POST /api/verify/face-match` (مطابقة الوجه).
-- [ ] تنفيذ `GET /api/verify/status` (جلب حالة التحقق).
+### 2. العمليات الخلفية (Backend APIs) ✅
+- [x] تنفيذ `POST /api/verify/send-otp` (إرسال رمز التحقق).
+- [x] تنفيذ `POST /api/verify/check-otp` (تأكيد رمز التحقق).
+- [x] تنفيذ `POST /api/verify/upload-id` (رفع الهوية + OCR).
+- [x] تنفيذ `POST /api/verify/upload-selfie` (رفع السيلفي).
+- [x] تنفيذ `POST /api/verify/face-match` (مطابقة الوجه).
+- [x] تنفيذ `GET /api/verify/status` (جلب حالة التحقق).
+- [x] تم رفع التعديلات على GitHub.
 
 ### 3. الواجهة الأمامية (React + Tailwind) ⏳
 - [ ] بناء مكون `VerificationStepper`.
@@ -37,4 +38,4 @@
 
 ## التحديث الأخير:
 - **التاريخ:** 11 مارس 2026
-- **الإجراء:** تم تحديث مخطط قاعدة البيانات (Drizzle ORM) وإضافة جدول `identity_verifications` ورفع التعديلات على GitHub.
+- **الإجراء:** تم الانتهاء من تنفيذ جميع الـ APIs الخلفية المطلوبة لنظام التحقق من الهوية، بما في ذلك التحقق من الهاتف، رفع الهوية، رفع السيلفي، ومطابقة الوجه. تم رفع التعديلات على GitHub.
