@@ -330,8 +330,11 @@ export const enhancedRouter = router({
 
         // In production, verify OTP against sent SMS
         // SECURITY: Implement proper OTP verification logic here
-        if (input.otp !== "123456") { // Placeholder for demo, should be replaced with real OTP check
-           throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid OTP" });
+        // For development/demo, we allow 123456 but this should be integrated with an SMS provider
+        const isValidOtp = process.env.NODE_ENV === "development" ? input.otp === "123456" : false;
+        
+        if (!isValidOtp) {
+           throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid or expired OTP" });
         }
 
         await db.update(users).set({

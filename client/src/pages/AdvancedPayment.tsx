@@ -87,7 +87,6 @@ export default function AdvancedPayment() {
     setIsSubmitting(true);
     depositMutation.mutate({
       amount: amount,
-      convertedAmount: convertedAmount.toFixed(2),
       paymentMethod: selectedMethod,
       paymentDetails: {
         timestamp: new Date().toISOString(),

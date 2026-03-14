@@ -36,12 +36,24 @@ import { verificationRouter } from "./routers/verification";
 import { encryptData } from "./_core/encryption";
 import { Decimal } from "decimal.js";
 import { chatRouter } from "./routers/chat";
+import { paymentAdminRouter } from "./routers/payment-admin";
+
+const COMMISSIONS: Record<string, number> = {
+  phone_credit: 0.30,
+  topup_card: 0.01,
+  bank_transfer: 0.02,
+  sadad: 0.01,
+  tadawul: 0.01,
+  edfaali: 0.01,
+  cash: 0.00,
+};
 import { eq } from "drizzle-orm";
 import { desc } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 
 export const appRouter = router({
   system: systemRouter,
+  paymentAdmin: paymentAdminRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
@@ -135,7 +147,6 @@ export const appRouter = router({
       .input(
         z.object({
           amount: z.string().refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) > 0, { message: "Amount must be a positive number" }),
-          convertedAmount: z.string().refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) > 0, { message: "Converted amount must be a positive number" }),
           paymentMethod: z.enum([
             "phone_credit",
             "topup_card",
@@ -152,13 +163,18 @@ export const appRouter = router({
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
 
+        // SECURITY: Recalculate convertedAmount on server to prevent tampering
+        const commissionRate = COMMISSIONS[input.paymentMethod] || 0;
+        const amount = new Decimal(input.amount);
+        const convertedAmount = amount.minus(amount.mul(commissionRate)).toFixed(2);
+
         try {
           return await db.transaction(async (tx) => {
             // 1. Create deposit request
             const [result] = await tx.insert(depositRequests).values({
               userId: ctx.user.id,
               amount: input.amount,
-              convertedAmount: input.convertedAmount,
+              convertedAmount: convertedAmount,
               paymentMethod: input.paymentMethod,
               paymentDetails: encryptData(JSON.stringify(input.paymentDetails)),
               status: "pending",
@@ -168,7 +184,7 @@ export const appRouter = router({
             await tx.insert(transactions).values({
               userId: ctx.user.id,
               type: "deposit",
-              amount: input.convertedAmount,
+              amount: convertedAmount,
               status: "pending",
               description: `إيداع عبر ${input.paymentMethod} (المبلغ الأصلي: ${input.amount} د.ل)`,
               reference: `DEP-${result.insertId}`,
