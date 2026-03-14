@@ -424,6 +424,39 @@ export type WithdrawalRequest = typeof withdrawalRequests.$inferSelect;
 export type InsertWithdrawalRequest = typeof withdrawalRequests.$inferInsert;
 
 /**
+ * Deposit requests table - tracks all deposit attempts
+ */
+export const depositRequests = mysqlTable("depositRequests", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  
+  amount: decimal("amount", { precision: 15, scale: 2 }).notNull(),
+  convertedAmount: decimal("convertedAmount", { precision: 15, scale: 2 }).notNull(), // Amount after commission
+  
+  paymentMethod: mysqlEnum("paymentMethod", [
+    "phone_credit",
+    "topup_card",
+    "bank_transfer",
+    "sadad",
+    "tadawul",
+    "edfaali",
+    "cash",
+  ]).notNull(),
+  
+  paymentDetails: text("paymentDetails"), // JSON string with encrypted details
+  
+  status: mysqlEnum("status", ["pending", "completed", "failed", "cancelled"]).default("pending").notNull(),
+  
+  adminNotes: text("adminNotes"),
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DepositRequest = typeof depositRequests.$inferSelect;
+export type InsertDepositRequest = typeof depositRequests.$inferInsert;
+
+/**
  * Trusted Seller Subscriptions table
  */
 export const trustedSellerSubscriptions = mysqlTable("trustedSellerSubscriptions", {

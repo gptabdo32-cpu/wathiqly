@@ -18,6 +18,7 @@ import Terms from './pages/Terms';
 import WalletManagement from './pages/WalletManagement';
 import Messaging from './pages/Messaging';
 import IdentityVerification from './pages/IdentityVerification';
+import AdvancedPayment from './pages/AdvancedPayment';
 
 function Router() {
   return (
@@ -35,6 +36,7 @@ function Router() {
       <Route path={'/verify'} component={IdentityVerification} />
            <Route path={"/"} component={Home} />
       <Route path={"/wallet"} component={WalletManagement} />
+      <Route path={"/payment"} component={AdvancedPayment} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

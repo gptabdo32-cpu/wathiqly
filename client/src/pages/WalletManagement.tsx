@@ -204,12 +204,12 @@ export default function WalletManagement() {
                 </div>
 
                 <Button 
-                  type="submit" 
+                  type="button" 
                   size="lg" 
-                  className="w-full"
-                  disabled={isLoadingDeposit}
+                  className="w-full bg-blue-600 hover:bg-blue-700"
+                  onClick={() => setLocation("/payment")}
                 >
-                  {isLoadingDeposit ? "جاري المعالجة..." : "إضافة الأموال"}
+                  انتقل لمركز الدفع المطور
                 </Button>
               </form>
             </Card>

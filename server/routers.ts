@@ -131,6 +131,71 @@ export const appRouter = router({
         return await getUserTransactions(ctx.user.id, input.limit, input.offset);
       }),
 
+    requestDeposit: protectedProcedure
+      .input(
+        z.object({
+          amount: z.string().refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) > 0, { message: "Amount must be a positive number" }),
+          convertedAmount: z.string().refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) > 0, { message: "Converted amount must be a positive number" }),
+          paymentMethod: z.enum([
+            "phone_credit",
+            "topup_card",
+            "bank_transfer",
+            "sadad",
+            "tadawul",
+            "edfaali",
+            "cash",
+          ]),
+          paymentDetails: z.record(z.string(), z.any()),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+
+        try {
+          return await db.transaction(async (tx) => {
+            // 1. Create deposit request
+            const [result] = await tx.insert(depositRequests).values({
+              userId: ctx.user.id,
+              amount: input.amount,
+              convertedAmount: input.convertedAmount,
+              paymentMethod: input.paymentMethod,
+              paymentDetails: encryptData(JSON.stringify(input.paymentDetails)),
+              status: "pending",
+            });
+
+            // 2. Create transaction record
+            await tx.insert(transactions).values({
+              userId: ctx.user.id,
+              type: "deposit",
+              amount: input.convertedAmount,
+              status: "pending",
+              description: `إيداع عبر ${input.paymentMethod} (المبلغ الأصلي: ${input.amount} د.ل)`,
+              reference: `DEP-${result.insertId}`,
+            } as any);
+
+            // 3. For instant methods (SADAD, Edfaali, etc. in a real system would use a webhook)
+            // For this project, we'll simulate success for certain methods if requested, 
+            // but let's keep them pending as per user request for bank/cash.
+            
+            await createAuditLog({
+              userId: ctx.user.id,
+              action: "deposit_request",
+              entityType: "deposit",
+              entityId: result.insertId,
+              newValue: { amount: input.amount, method: input.paymentMethod },
+            });
+
+            return { success: true, depositId: result.insertId };
+          });
+        } catch (error: any) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: error.message || "Failed to process deposit request",
+          });
+        }
+      }),
+
     requestWithdrawal: protectedProcedure
       .input(
         z.object({
