@@ -6,9 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
-import { DollarSign, ArrowDownLeft, ArrowUpRight, History, AlertCircle } from "lucide-react";
+import { DollarSign, ArrowDownLeft, ArrowUpRight, History, AlertCircle, Send, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
+import { format } from "date-fns";
 
 export default function WalletManagement() {
   const { user, isAuthenticated } = useAuth();
@@ -16,8 +17,37 @@ export default function WalletManagement() {
   const [depositAmount, setDepositAmount] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [bankAccount, setBankAccount] = useState("");
-  const [isLoadingDeposit, setIsLoadingDeposit] = useState(false);
-  const [isLoadingWithdraw, setIsLoadingWithdraw] = useState(false);
+  
+  // Transfer state
+  const [transferEmail, setTransferEmail] = useState("");
+  const [transferAmount, setTransferAmount] = useState("");
+  const [transferNote, setTransferNote] = useState("");
+
+  const utils = trpc.useUtils();
+
+  // Real data from tRPC
+  const { data: wallet, isLoading: isLoadingWallet } = trpc.wallet.getBalance.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+
+  const { data: transactions, isLoading: isLoadingTransactions } = trpc.wallet.getTransactionHistory.useQuery(
+    { limit: 20 },
+    { enabled: isAuthenticated }
+  );
+
+  const transferMutation = trpc.wallet.transfer.useMutation({
+    onSuccess: () => {
+      toast.success("تم التحويل بنجاح");
+      setTransferEmail("");
+      setTransferAmount("");
+      setTransferNote("");
+      utils.wallet.getBalance.invalidate();
+      utils.wallet.getTransactionHistory.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || "فشل في إتمام عملية التحويل");
+    },
+  });
 
   // التحقق من تسجيل الدخول
   if (!isAuthenticated) {
@@ -35,85 +65,28 @@ export default function WalletManagement() {
     );
   }
 
-  // محاكاة الرصيد الحالي
-  const currentBalance = 1500.00;
+  const currentBalance = parseFloat(wallet?.balance || "0");
   const currency = "LYD";
 
-  // معالجة الإيداع
-  const handleDeposit = async (e: React.FormEvent) => {
+  const handleTransfer = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!depositAmount || parseFloat(depositAmount) <= 0) {
-      toast.error("يرجى إدخال مبلغ صحيح");
+    if (!transferEmail || !transferAmount) {
+      toast.error("يرجى ملء جميع الحقول المطلوبة");
       return;
     }
 
-    setIsLoadingDeposit(true);
-    try {
-      // محاكاة عملية الإيداع
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      toast.success(`تم إضافة ${depositAmount} ${currency} إلى محفظتك بنجاح`);
-      setDepositAmount("");
-      
-      // في الواقع، يجب استدعاء API حقيقي هنا
-      // const result = await trpc.wallet.deposit.mutate({
-      //   amount: parseFloat(depositAmount),
-      //   paymentMethod: "card"
-      // });
-    } catch (error) {
-      toast.error("حدث خطأ أثناء الإيداع");
-    } finally {
-      setIsLoadingDeposit(false);
+    if (parseFloat(transferAmount) > currentBalance) {
+      toast.error("الرصيد غير كافٍ");
+      return;
     }
+
+    transferMutation.mutate({
+      recipientEmail: transferEmail,
+      amount: transferAmount,
+      description: transferNote,
+    });
   };
-
-  // معالجة السحب
-  const handleWithdraw = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) {
-      toast.error("يرجى إدخال مبلغ صحيح");
-      return;
-    }
-
-    if (parseFloat(withdrawAmount) > currentBalance) {
-      toast.error("الرصيد غير كافي");
-      return;
-    }
-
-    if (!bankAccount) {
-      toast.error("يرجى إدخال رقم الحساب البنكي");
-      return;
-    }
-
-    setIsLoadingWithdraw(true);
-    try {
-      // محاكاة عملية السحب
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      toast.success(`تم طلب سحب ${withdrawAmount} ${currency} إلى حسابك البنكي`);
-      setWithdrawAmount("");
-      setBankAccount("");
-      
-      // في الواقع، يجب استدعاء API حقيقي هنا
-      // const result = await trpc.wallet.withdraw.mutate({
-      //   amount: parseFloat(withdrawAmount),
-      //   bankAccount: bankAccount
-      // });
-    } catch (error) {
-      toast.error("حدث خطأ أثناء السحب");
-    } finally {
-      setIsLoadingWithdraw(false);
-    }
-  };
-
-  const transactions = [
-    { id: 1, type: "deposit", amount: 500, date: "2026-03-07", status: "completed", description: "إيداع عبر بطاقة ائتمان" },
-    { id: 2, type: "withdraw", amount: 200, date: "2026-03-06", status: "pending", description: "سحب إلى الحساب البنكي" },
-    { id: 3, type: "deposit", amount: 1000, date: "2026-03-05", status: "completed", description: "إيداع عبر تحويل بنكي" },
-    { id: 4, type: "withdraw", amount: 150, date: "2026-03-04", status: "completed", description: "سحب إلى الحساب البنكي" },
-  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white" dir="rtl">
@@ -121,7 +94,7 @@ export default function WalletManagement() {
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white py-8">
         <div className="container max-w-6xl mx-auto px-4">
           <h1 className="text-4xl font-bold mb-2">محفظتي</h1>
-          <p className="text-blue-100">إدارة رصيدك والإيداع والسحب</p>
+          <p className="text-blue-100">إدارة رصيدك، الإيداع، السحب، والتحويل بين الحسابات</p>
         </div>
       </div>
 
@@ -131,7 +104,11 @@ export default function WalletManagement() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-blue-100 mb-2">الرصيد الحالي</p>
-              <h2 className="text-5xl font-bold">{currentBalance.toFixed(2)}</h2>
+              {isLoadingWallet ? (
+                <Loader2 className="w-10 h-10 animate-spin" />
+              ) : (
+                <h2 className="text-5xl font-bold">{currentBalance.toFixed(2)}</h2>
+              )}
               <p className="text-blue-100 mt-2">{currency}</p>
             </div>
             <DollarSign className="w-20 h-20 opacity-20" />
@@ -139,8 +116,12 @@ export default function WalletManagement() {
         </Card>
 
         {/* Tabs */}
-        <Tabs defaultValue="deposit" className="mb-8">
-          <TabsList className="grid w-full grid-cols-3">
+        <Tabs defaultValue="transfer" className="mb-8">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="transfer" className="flex items-center gap-2">
+              <Send className="w-4 h-4" />
+              تحويل داخلي
+            </TabsTrigger>
             <TabsTrigger value="deposit" className="flex items-center gap-2">
               <ArrowDownLeft className="w-4 h-4" />
               إيداع
@@ -155,52 +136,98 @@ export default function WalletManagement() {
             </TabsTrigger>
           </TabsList>
 
-          {/* Deposit Tab */}
-          <TabsContent value="deposit">
+          {/* Transfer Tab */}
+          <TabsContent value="transfer">
             <Card className="p-8">
-              <h3 className="text-2xl font-bold text-slate-900 mb-6">إضافة أموال إلى محفظتك</h3>
-              <form onSubmit={handleDeposit} className="space-y-6">
-                <div>
-                  <Label htmlFor="deposit-amount" className="text-slate-700 font-semibold mb-2 block">
-                    المبلغ ({currency})
-                  </Label>
-                  <div className="relative">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-bold text-slate-900">تحويل إلى حساب آخر</h3>
+                <div className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-medium">
+                  بدون عمولة
+                </div>
+              </div>
+              
+              <form onSubmit={handleTransfer} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="transfer-email" className="text-slate-700 font-semibold">
+                      البريد الإلكتروني للمستلم
+                    </Label>
                     <Input
-                      id="deposit-amount"
-                      type="number"
-                      placeholder="أدخل المبلغ"
-                      value={depositAmount}
-                      onChange={(e) => setDepositAmount(e.target.value)}
-                      step="0.01"
-                      min="0"
-                      className="pl-12"
+                      id="transfer-email"
+                      type="email"
+                      placeholder="example@email.com"
+                      value={transferEmail}
+                      onChange={(e) => setTransferEmail(e.target.value)}
+                      required
                     />
-                    <span className="absolute left-4 top-3 text-slate-500">{currency}</span>
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="transfer-amount" className="text-slate-700 font-semibold">
+                      المبلغ ({currency})
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="transfer-amount"
+                        type="number"
+                        placeholder="0.00"
+                        value={transferAmount}
+                        onChange={(e) => setTransferAmount(e.target.value)}
+                        step="0.01"
+                        min="0.01"
+                        className="pl-12"
+                        required
+                      />
+                      <span className="absolute left-4 top-3 text-slate-500">{currency}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="transfer-note" className="text-slate-700 font-semibold">
+                    ملاحظة (اختياري)
+                  </Label>
+                  <Input
+                    id="transfer-note"
+                    placeholder="مثلاً: دفعة مقابل خدمة..."
+                    value={transferNote}
+                    onChange={(e) => setTransferNote(e.target.value)}
+                  />
                 </div>
 
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <p className="text-sm text-slate-600">
-                    <strong>ملاحظة:</strong> يتم معالجة طلبات الإيداع فوراً. قد تستغرق بعض الطرق 1-2 يوم عمل.
+                    <strong>تنبيه:</strong> يرجى التأكد من البريد الإلكتروني للمستلم بدقة. عمليات التحويل الداخلي فورية ولا يمكن التراجع عنها.
                   </p>
                 </div>
 
-                <div className="space-y-3">
-                  <h4 className="font-semibold text-slate-900">طرق الدفع المتاحة:</h4>
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50">
-                      <input type="radio" name="payment" defaultChecked className="w-4 h-4" />
-                      <span className="text-slate-700">بطاقة ائتمان / خصم</span>
-                    </label>
-                    <label className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50">
-                      <input type="radio" name="payment" className="w-4 h-4" />
-                      <span className="text-slate-700">تحويل بنكي</span>
-                    </label>
-                    <label className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50">
-                      <input type="radio" name="payment" className="w-4 h-4" />
-                      <span className="text-slate-700">محفظة رقمية</span>
-                    </label>
-                  </div>
+                <Button 
+                  type="submit" 
+                  size="lg" 
+                  className="w-full bg-blue-600 hover:bg-blue-700"
+                  disabled={transferMutation.isPending}
+                >
+                  {transferMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin ml-2" />
+                      جاري التحويل...
+                    </>
+                  ) : (
+                    "إتمام التحويل"
+                  )}
+                </Button>
+              </form>
+            </Card>
+          </TabsContent>
+
+          {/* Deposit Tab */}
+          <TabsContent value="deposit">
+            <Card className="p-8">
+              <h3 className="text-2xl font-bold text-slate-900 mb-6">إضافة أموال إلى محفظتك</h3>
+              <div className="space-y-6">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-sm text-slate-600">
+                    <strong>ملاحظة:</strong> يتم معالجة طلبات الإيداع عبر مركز الدفع المطور الخاص بنا.
+                  </p>
                 </div>
 
                 <Button 
@@ -211,7 +238,7 @@ export default function WalletManagement() {
                 >
                   انتقل لمركز الدفع المطور
                 </Button>
-              </form>
+              </div>
             </Card>
           </TabsContent>
 
@@ -219,56 +246,22 @@ export default function WalletManagement() {
           <TabsContent value="withdraw">
             <Card className="p-8">
               <h3 className="text-2xl font-bold text-slate-900 mb-6">سحب الأموال من محفظتك</h3>
-              <form onSubmit={handleWithdraw} className="space-y-6">
-                <div>
-                  <Label htmlFor="withdraw-amount" className="text-slate-700 font-semibold mb-2 block">
-                    المبلغ ({currency})
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id="withdraw-amount"
-                      type="number"
-                      placeholder="أدخل المبلغ"
-                      value={withdrawAmount}
-                      onChange={(e) => setWithdrawAmount(e.target.value)}
-                      step="0.01"
-                      min="0"
-                      max={currentBalance}
-                      className="pl-12"
-                    />
-                    <span className="absolute left-4 top-3 text-slate-500">{currency}</span>
-                  </div>
-                  <p className="text-sm text-slate-500 mt-2">الرصيد المتاح: {currentBalance.toFixed(2)} {currency}</p>
-                </div>
-
-                <div>
-                  <Label htmlFor="bank-account" className="text-slate-700 font-semibold mb-2 block">
-                    رقم الحساب البنكي
-                  </Label>
-                  <Input
-                    id="bank-account"
-                    type="text"
-                    placeholder="أدخل رقم حسابك البنكي"
-                    value={bankAccount}
-                    onChange={(e) => setBankAccount(e.target.value)}
-                  />
-                </div>
-
+              <div className="space-y-6">
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                   <p className="text-sm text-slate-600">
-                    <strong>ملاحظة:</strong> يتم معالجة طلبات السحب خلال 1-3 أيام عمل. قد يتم تطبيق رسوم سحب حسب البنك.
+                    <strong>ملاحظة:</strong> يتم معالجة طلبات السحب خلال 1-3 أيام عمل.
                   </p>
                 </div>
 
                 <Button 
-                  type="submit" 
+                  type="button" 
                   size="lg" 
                   className="w-full bg-orange-600 hover:bg-orange-700"
-                  disabled={isLoadingWithdraw}
+                  onClick={() => setLocation("/wallet")} // Should point to a withdrawal form if exists
                 >
-                  {isLoadingWithdraw ? "جاري المعالجة..." : "طلب السحب"}
+                  طلب سحب (قريباً)
                 </Button>
-              </form>
+              </div>
             </Card>
           </TabsContent>
 
@@ -277,58 +270,70 @@ export default function WalletManagement() {
             <Card className="p-8">
               <h3 className="text-2xl font-bold text-slate-900 mb-6">سجل المعاملات</h3>
               
-              {transactions.length === 0 ? (
+              {isLoadingTransactions ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="w-12 h-12 animate-spin text-blue-600" />
+                </div>
+              ) : !transactions || transactions.length === 0 ? (
                 <div className="text-center py-12">
                   <History className="w-12 h-12 text-slate-300 mx-auto mb-4" />
                   <p className="text-slate-500">لا توجد معاملات حتى الآن</p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {transactions.map((tx) => (
-                    <div key={tx.id} className="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
-                      <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                          tx.type === 'deposit' ? 'bg-green-100' : 'bg-red-100'
-                        }`}>
-                          {tx.type === 'deposit' ? (
-                            <ArrowDownLeft className={`w-6 h-6 ${tx.type === 'deposit' ? 'text-green-600' : 'text-red-600'}`} />
-                          ) : (
-                            <ArrowUpRight className="w-6 h-6 text-red-600" />
-                          )}
-                        </div>
-                        <div>
-                          <p className="font-semibold text-slate-900">{tx.description}</p>
-                          <p className="text-sm text-slate-500">{tx.date}</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className={`font-bold text-lg ${tx.type === 'deposit' ? 'text-green-600' : 'text-red-600'}`}>
-                          {tx.type === 'deposit' ? '+' : '-'}{tx.amount} {currency}
-                        </p>
-                        <p className={`text-sm ${
-                          tx.status === 'completed' ? 'text-green-600' : 'text-yellow-600'
-                        }`}>
-                          {tx.status === 'completed' ? 'مكتملة' : 'قيد الانتظار'}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-right">
+                    <thead>
+                      <tr className="border-b border-slate-100">
+                        <th className="pb-4 font-semibold text-slate-600">التاريخ</th>
+                        <th className="pb-4 font-semibold text-slate-600">الوصف</th>
+                        <th className="pb-4 font-semibold text-slate-600">النوع</th>
+                        <th className="pb-4 font-semibold text-slate-600">المبلغ</th>
+                        <th className="pb-4 font-semibold text-slate-600">الحالة</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {transactions.map((tx: any) => (
+                        <tr key={tx.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="py-4 text-slate-600">
+                            {format(new Date(tx.createdAt), "yyyy-MM-dd")}
+                          </td>
+                          <td className="py-4 text-slate-900 font-medium">{tx.description}</td>
+                          <td className="py-4">
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              tx.type === "deposit" ? "bg-green-100 text-green-700" : 
+                              tx.type === "transfer" ? "bg-blue-100 text-blue-700" :
+                              "bg-orange-100 text-orange-700"
+                            }`}>
+                              {tx.type === "deposit" ? "إيداع" : 
+                               tx.type === "transfer" ? "تحويل" : "سحب"}
+                            </span>
+                          </td>
+                          <td className={`py-4 font-bold ${
+                            tx.type === "deposit" || (tx.type === "transfer" && tx.description.includes("من")) 
+                            ? "text-green-600" : "text-red-600"
+                          }`}>
+                            {tx.type === "deposit" || (tx.type === "transfer" && tx.description.includes("من")) ? "+" : "-"}
+                            {parseFloat(tx.amount).toFixed(2)} {currency}
+                          </td>
+                          <td className="py-4">
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              tx.status === "completed" ? "bg-green-100 text-green-700" : 
+                              tx.status === "pending" ? "bg-yellow-100 text-yellow-700" :
+                              "bg-red-100 text-red-700"
+                            }`}>
+                              {tx.status === "completed" ? "مكتمل" : 
+                               tx.status === "pending" ? "قيد الانتظار" : "فاشل"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </Card>
           </TabsContent>
         </Tabs>
-
-        {/* Security Info */}
-        <Card className="bg-blue-50 border border-blue-200 p-6">
-          <h4 className="font-bold text-slate-900 mb-3">🔒 أمان محفظتك</h4>
-          <ul className="space-y-2 text-sm text-slate-600">
-            <li>✓ جميع المعاملات مشفرة بـ SSL/TLS</li>
-            <li>✓ بيانات حسابك محمية بمعايير PCI DSS</li>
-            <li>✓ توثيق ثنائي العامل متاح</li>
-            <li>✓ لا نخزن بيانات بطاقتك الكاملة</li>
-          </ul>
-        </Card>
       </div>
     </div>
   );

@@ -280,6 +280,104 @@ export const appRouter = router({
         }
       }),
 
+    transfer: protectedProcedure
+      .input(
+        z.object({
+          recipientEmail: z.string().email("Invalid recipient email"),
+          amount: z.string().refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) > 0, { message: "Amount must be a positive number" }),
+          description: z.string().max(200).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+
+        try {
+          return await db.transaction(async (tx) => {
+            // 1. Find recipient
+            const [recipient] = await tx.select().from(users).where(eq(users.email, input.recipientEmail)).limit(1);
+            if (!recipient) {
+              throw new TRPCError({ code: "NOT_FOUND", message: "المستلم غير موجود" });
+            }
+
+            if (recipient.id === ctx.user.id) {
+              throw new TRPCError({ code: "BAD_REQUEST", message: "لا يمكنك التحويل لنفسك" });
+            }
+
+            // 2. Get sender wallet with lock
+            const [senderWallet] = await tx.select().from(wallets).where(eq(wallets.userId, ctx.user.id)).limit(1).for("update");
+            if (!senderWallet) {
+              throw new TRPCError({ code: "NOT_FOUND", message: "محفظة المرسل غير موجودة" });
+            }
+
+            // 3. Validate balance
+            const amount = new Decimal(input.amount);
+            if (new Decimal(senderWallet.balance).lt(amount)) {
+              throw new TRPCError({ code: "BAD_REQUEST", message: "الرصيد غير كافٍ" });
+            }
+
+            // 4. Get or create recipient wallet
+            let [recipientWallet] = await tx.select().from(wallets).where(eq(wallets.userId, recipient.id)).limit(1).for("update");
+            if (!recipientWallet) {
+              const [insertResult] = await tx.insert(wallets).values({
+                userId: recipient.id,
+                balance: "0",
+                pendingBalance: "0",
+                totalEarned: "0",
+                totalWithdrawn: "0",
+              });
+              [recipientWallet] = await tx.select().from(wallets).where(eq(wallets.id, insertResult.insertId)).limit(1).for("update");
+            }
+
+            // 5. Update balances (No commission as requested)
+            const newSenderBalance = new Decimal(senderWallet.balance).minus(amount).toFixed(2);
+            const newRecipientBalance = new Decimal(recipientWallet.balance).plus(amount).toFixed(2);
+
+            await tx.update(wallets).set({ balance: newSenderBalance, updatedAt: new Date() }).where(eq(wallets.id, senderWallet.id));
+            await tx.update(wallets).set({ balance: newRecipientBalance, updatedAt: new Date() }).where(eq(wallets.id, recipientWallet.id));
+
+            // 6. Create transaction records
+            const transferDesc = input.description || `تحويل داخلي`;
+            
+            // Sender transaction (Debit)
+            await tx.insert(transactions).values({
+              userId: ctx.user.id,
+              type: "transfer",
+              amount: input.amount,
+              status: "completed",
+              description: `${transferDesc} إلى ${recipient.name || recipient.email}`,
+            } as any);
+
+            // Recipient transaction (Credit)
+            await tx.insert(transactions).values({
+              userId: recipient.id,
+              type: "transfer",
+              amount: input.amount,
+              status: "completed",
+              description: `${transferDesc} من ${ctx.user.name || ctx.user.email}`,
+            } as any);
+
+            await createAuditLog({
+              userId: ctx.user.id,
+              action: "internal_transfer",
+              entityType: "wallet",
+              entityId: senderWallet.id,
+              newValue: { amount: input.amount, recipientId: recipient.id },
+              ipAddress: ctx.req.ip,
+              userAgent: ctx.req.headers["user-agent"],
+            });
+
+            return { success: true };
+          });
+        } catch (error) {
+          if (error instanceof TRPCError) throw error;
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "فشل في إتمام عملية التحويل",
+          });
+        }
+      }),
+
     getWithdrawalHistory: protectedProcedure
       .input(
         z.object({
