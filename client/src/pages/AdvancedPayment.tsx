@@ -16,7 +16,8 @@ import {
   CheckCircle2, 
   AlertTriangle,
   ChevronRight,
-  ShieldCheck
+  ShieldCheck,
+  Loader2
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -43,10 +44,19 @@ export default function AdvancedPayment() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [step, setStep] = useState<"select" | "details" | "confirm" | "success">("select");
 
+  const utils = trpc.useUtils();
+
+  // Real wallet data
+  const { data: wallet, isLoading: isLoadingWallet } = trpc.wallet.getBalance.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+
   const depositMutation = trpc.wallet.requestDeposit.useMutation({
     onSuccess: () => {
       setStep("success");
       toast.success("تم تقديم طلب الإيداع بنجاح");
+      utils.wallet.getBalance.invalidate();
+      utils.wallet.getTransactionHistory.invalidate();
     },
     onError: (error) => {
       toast.error(`خطأ: ${error.message}`);
@@ -77,7 +87,7 @@ export default function AdvancedPayment() {
     setIsSubmitting(true);
     depositMutation.mutate({
       amount: amount,
-      convertedAmount: convertedAmount.toString(),
+      convertedAmount: convertedAmount.toFixed(2),
       paymentMethod: selectedMethod,
       paymentDetails: {
         timestamp: new Date().toISOString(),
@@ -96,6 +106,8 @@ export default function AdvancedPayment() {
     { id: "cash", name: "كاش / فرع", icon: Banknote, color: "bg-slate-100 text-slate-600", desc: "الدفع في فروعنا" },
   ];
 
+  const currentBalance = parseFloat(wallet?.balance || "0");
+
   return (
     <div className="min-h-screen bg-slate-50 py-12 px-4" dir="rtl">
       <div className="max-w-4xl mx-auto">
@@ -108,7 +120,11 @@ export default function AdvancedPayment() {
           <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
             <div className="text-left">
               <p className="text-xs text-slate-500">رصيدك الحالي</p>
-              <p className="text-xl font-bold text-blue-600">1,500.00 د.ل</p>
+              {isLoadingWallet ? (
+                <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+              ) : (
+                <p className="text-xl font-bold text-blue-600">{currentBalance.toFixed(2)} د.ل</p>
+              )}
             </div>
             <Wallet className="w-8 h-8 text-blue-600 opacity-20" />
           </div>
@@ -259,7 +275,14 @@ export default function AdvancedPayment() {
                 onClick={handleConfirm}
                 disabled={isSubmitting}
               >
-                {isSubmitting ? "جاري المعالجة..." : "تأكيد الدفع الآن"}
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin ml-2" />
+                    جاري المعالجة...
+                  </>
+                ) : (
+                  "تأكيد الدفع الآن"
+                )}
               </Button>
             </div>
           </Card>
