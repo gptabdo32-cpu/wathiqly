@@ -1,343 +1,243 @@
+import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { getLoginUrl } from "@/const";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   Shield,
-  Zap,
-  Users,
-  TrendingUp,
-  CheckCircle,
-  ArrowRight,
-  Lock,
-  Clock,
-  DollarSign,
+  Search,
+  Gamepad2,
+  Hotel,
+  Smartphone,
+  Car,
   Star,
+  ChevronLeft,
+  ChevronRight,
+  TrendingUp,
+  ShoppingBag,
+  Zap,
 } from "lucide-react";
 
 export default function Home() {
   const { user, isAuthenticated } = useAuth();
+  const [, setLocation] = useLocation();
+  const [searchQuery, setSearchQuery] = useState("");
 
-  const features = [
+  const categories = [
+    { id: "service", name: "خدمات وتجارب", icon: Hotel, color: "bg-blue-500" },
+    { id: "digital", name: "منتجات رقمية", icon: Gamepad2, color: "bg-purple-500" },
+    { id: "physical", name: "منتجات مادية", icon: Smartphone, color: "bg-orange-500" },
+    { id: "vehicle", name: "سيارات ومركبات", icon: Car, color: "bg-green-500" },
+  ];
+
+  const featuredOffers = [
     {
-      icon: Shield,
-      title: "وساطة آمنة 100%",
-      description: "نحتفظ بأموالك حتى تتأكد من استلام المنتج بسلام",
+      id: 1,
+      title: "حسابات ببجي مستويات عالية",
+      image: "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800&q=80",
+      category: "digital",
+      price: "150 ل.د",
     },
     {
-      icon: Clock,
-      title: "سريع وسهل",
-      description: "أكمل معاملتك في دقائق معدودة بدون تعقيدات",
+      id: 2,
+      title: "آيفون 15 برو ماكس - مستعمل نظيف",
+      image: "https://images.unsplash.com/photo-1696446701796-da61225697cc?w=800&q=80",
+      category: "physical",
+      price: "4500 ل.د",
     },
     {
-      icon: Lock,
-      title: "بيانات محمية",
-      description: "تشفير عالي المستوى لحماية معلوماتك الشخصية",
-    },
-    {
-      icon: TrendingUp,
-      title: "نمو أعمالك",
-      description: "أدوات متقدمة لإدارة مبيعاتك وتحليل الأداء",
-    },
-    {
-      icon: Users,
-      title: "مجتمع موثوق",
-      description: "آلاف المستخدمين الموثوقين على المنصة",
-    },
-    {
-      icon: DollarSign,
-      title: "عمولات منخفضة",
-      description: "أقل عمولات في السوق مع شفافية كاملة",
+      id: 3,
+      title: "حجز استراحات - تاجوراء",
+      image: "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800&q=80",
+      category: "service",
+      price: "300 ل.د / يوم",
     },
   ];
 
-  const testimonials = [
-    {
-      name: "أحمد محمد",
-      role: "بائع إلكتروني",
-      text: "وثّقلي غيرت طريقة عملي، آمن وموثوق 100%",
-      rating: 5,
-    },
-    {
-      name: "فاطمة علي",
-      role: "مشترية",
-      text: "أشعر بالأمان التام عند الشراء، الوساطة فعلاً تحمي حقوقي",
-      rating: 5,
-    },
-    {
-      name: "محمود حسن",
-      role: "تاجر",
-      text: "الأداة الأفضل للبيع الآمن، لا أستطيع الاستغناء عنها",
-      rating: 5,
-    },
-  ];
-
-  const steps = [
-    {
-      number: "1",
-      title: "اختر نوع حسابك",
-      description: "مشتري أو بائع أو كليهما",
-    },
-    {
-      number: "2",
-      title: "تحقق من هويتك",
-      description: "عملية سريعة وآمنة للتحقق من البيانات",
-    },
-    {
-      number: "3",
-      title: "ابدأ المعاملة",
-      description: "ابحث عن المنتجات أو ضع إعلانك",
-    },
-    {
-      number: "4",
-      title: "استقبل أموالك",
-      description: "تحويل آمن بعد تأكيد المشتري",
-    },
-  ];
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      setLocation(`/products?q=${encodeURIComponent(searchQuery)}`);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white font-arabic" dir="rtl">
-      {/* Navigation */}
-      <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
-        <div className="container max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center">
-              <Shield className="w-6 h-6 text-white" />
-            </div>
-            <h1 className="text-xl font-bold text-slate-900">وثّقلي</h1>
-          </div>
-          <div className="flex items-center gap-4">
-            {isAuthenticated ? (
-              <>
-                <Button variant="ghost" asChild>
-                  <Link href="/dashboard">لوحة التحكم</Link>
+    <div className="min-h-screen bg-slate-50 font-arabic" dir="rtl">
+      {/* 1️⃣ شريط التنقل الرئيسي */}
+      <nav className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center justify-between h-16 gap-4">
+            {/* Logo */}
+            <Link href="/" className="flex items-center gap-2 flex-shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center shadow-lg shadow-orange-200">
+                <Shield className="w-6 h-6 text-white" />
+              </div>
+              <span className="text-2xl font-black text-slate-900 hidden sm:block">وثّقلي</span>
+            </Link>
+
+            {/* 2️⃣ شريط البحث */}
+            <form onSubmit={handleSearch} className="flex-1 max-w-2xl relative group">
+              <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-orange-500 transition-colors" size={20} />
+              <Input
+                placeholder="ابحث عن منتج، مدينة، أو فئة..."
+                className="w-full pr-12 h-11 bg-slate-100 border-none rounded-2xl focus-visible:ring-2 focus-visible:ring-orange-500 transition-all text-right"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </form>
+
+            {/* Auth Actions */}
+            <div className="flex items-center gap-3">
+              {isAuthenticated ? (
+                <Button variant="ghost" className="rounded-xl" asChild>
+                  <Link href="/dashboard">حسابي</Link>
                 </Button>
-                <Button asChild>
-                  <Link href="/products">تصفح المنتجات</Link>
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button variant="ghost" asChild>
+              ) : (
+                <Button className="bg-orange-500 hover:bg-orange-600 rounded-xl px-6" asChild>
                   <a href={getLoginUrl()}>دخول</a>
                 </Button>
-                <Button asChild>
-                  <a href={getLoginUrl()}>تسجيل</a>
-                </Button>
-              </>
-            )}
+              )}
+            </div>
+          </div>
+
+          {/* Quick Links Bar */}
+          <div className="flex items-center gap-6 py-3 overflow-x-auto no-scrollbar text-sm font-medium text-slate-600 border-t border-slate-100">
+            {categories.map((cat) => (
+              <Link key={cat.id} href={`/products?type=${cat.id}`} className="whitespace-nowrap hover:text-orange-500 transition-colors flex items-center gap-2">
+                <cat.icon size={16} />
+                {cat.name}
+              </Link>
+            ))}
+            <Link href="/products?sort=popular" className="whitespace-nowrap hover:text-orange-500 transition-colors flex items-center gap-2 text-orange-600">
+              <Zap size={16} />
+              عروض اليوم
+            </Link>
           </div>
         </div>
       </nav>
 
-      {/* Hero Section */}
-      <section className="py-20 px-4">
-        <div className="container max-w-6xl mx-auto">
-          <div className="grid md:grid-cols-2 gap-12 items-center">
-            <div>
-              <h2 className="text-5xl font-bold text-slate-900 mb-6 leading-tight">
-                منصة وثّقلي
-                <br />
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-blue-700">
-                  الوساطة الآمنة
-                </span>
-              </h2>
-              <p className="text-xl text-slate-600 mb-8">
-                منصة موثوقة وآمنة للمعاملات التجارية الرقمية. نحن نحمي حقوق البائع والمشتري معاً بنظام وساطة عادل وشفاف.
-              </p>
-              <div className="flex gap-4">
-                <Button size="lg" asChild>
-                  <a href={getLoginUrl()}>ابدأ الآن</a>
-                </Button>
-                <Button size="lg" variant="outline" asChild>
-                  <Link href="/faq">اعرف أكثر</Link>
-                </Button>
-              </div>
-              <div className="mt-8 flex gap-6 text-sm text-slate-600">
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                  <span>آمن 100%</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                  <span>بدون رسوم إضافية</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                  <span>دعم 24/7</span>
-                </div>
-              </div>
+      <main className="container mx-auto px-4 py-8 space-y-12">
+        {/* 3️⃣ قسم العروض المميزة (سلايدر) */}
+        <section className="relative group">
+          <div className="overflow-hidden rounded-[2rem] aspect-[21/9] relative bg-slate-900">
+            <img 
+              src="https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=1600&q=80" 
+              className="w-full h-full object-cover opacity-60"
+              alt="Featured Offer"
+            />
+            <div className="absolute inset-0 flex flex-col justify-center px-12 text-white space-y-4">
+              <span className="bg-orange-500 w-fit px-4 py-1 rounded-full text-sm font-bold">خصم لفترة محدودة</span>
+              <h2 className="text-4xl md:text-6xl font-black leading-tight">تسوق بأمان <br/> في أكبر سوق ليبي</h2>
+              <p className="text-lg text-slate-200 max-w-lg">وثّقلي تضمن لك حقك في كل عملية شراء أو حجز. وساطة آمنة 100%.</p>
+              <Button size="lg" className="bg-white text-slate-900 hover:bg-slate-100 rounded-2xl w-fit px-8 font-bold">تصفح العروض</Button>
             </div>
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-3xl blur-3xl"></div>
-              <div className="relative bg-gradient-to-br from-blue-600 to-blue-700 rounded-3xl p-8 text-white">
-                <div className="space-y-4">
-                  <div className="bg-white/10 rounded-lg p-4 backdrop-blur-sm">
-                    <div className="flex items-center gap-3 mb-2">
-                      <Shield className="w-5 h-5" />
-                      <span className="font-semibold">معاملة آمنة</span>
-                    </div>
-                    <p className="text-sm text-white/80">أموالك محمية حتى استلام المنتج</p>
-                  </div>
-                  <div className="bg-white/10 rounded-lg p-4 backdrop-blur-sm">
-                    <div className="flex items-center gap-3 mb-2">
-                      <Clock className="w-5 h-5" />
-                      <span className="font-semibold">سريع وسهل</span>
-                    </div>
-                    <p className="text-sm text-white/80">أكمل معاملتك في دقائق</p>
-                  </div>
-                  <div className="bg-white/10 rounded-lg p-4 backdrop-blur-sm">
-                    <div className="flex items-center gap-3 mb-2">
-                      <Lock className="w-5 h-5" />
-                      <span className="font-semibold">محمي بالتشفير</span>
-                    </div>
-                    <p className="text-sm text-white/80">أعلى معايير الأمان</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            
+            {/* Slider Controls */}
+            <button className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity">
+              <ChevronLeft size={24} />
+            </button>
+            <button className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity">
+              <ChevronRight size={24} />
+            </button>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* How It Works */}
-      <section className="py-20 px-4 bg-slate-100">
-        <div className="container max-w-6xl mx-auto">
-          <h2 className="text-4xl font-bold text-slate-900 mb-4 text-center">كيف تعمل وثّقلي؟</h2>
-          <p className="text-xl text-slate-600 text-center mb-16 max-w-2xl mx-auto">
-            عملية بسيطة وآمنة في 4 خطوات فقط
-          </p>
-          <div className="grid md:grid-cols-4 gap-6">
-            {steps.map((step, idx) => (
-              <div key={idx} className="relative">
-                {idx < steps.length - 1 && (
-                  <div className="hidden md:block absolute top-20 -right-3 w-6 h-1 bg-blue-600"></div>
-                )}
-                <Card className="p-6 text-center bg-white hover:shadow-lg transition-shadow">
-                  <div className="w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center text-xl font-bold mx-auto mb-4">
-                    {step.number}
+        {/* 4️⃣ الأقسام المختصرة */}
+        <section className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h3 className="text-2xl font-bold text-slate-900">تصفح حسب الفئة</h3>
+            <Link href="/products" className="text-orange-500 font-bold hover:underline">عرض الكل</Link>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            {categories.map((cat) => (
+              <Link key={cat.id} href={`/products?type=${cat.id}`}>
+                <Card className="p-8 flex flex-col items-center justify-center gap-4 hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer border-none bg-white rounded-[2rem] group">
+                  <div className={`w-20 h-20 rounded-3xl ${cat.color} flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform`}>
+                    <cat.icon size={36} />
                   </div>
-                  <h3 className="font-bold text-slate-900 mb-2">{step.title}</h3>
-                  <p className="text-sm text-slate-600">{step.description}</p>
+                  <span className="font-bold text-slate-800 text-lg">{cat.name}</span>
                 </Card>
-              </div>
+              </Link>
             ))}
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Features */}
-      <section className="py-20 px-4">
-        <div className="container max-w-6xl mx-auto">
-          <h2 className="text-4xl font-bold text-slate-900 mb-4 text-center">المزايا الرئيسية</h2>
-          <p className="text-xl text-slate-600 text-center mb-16 max-w-2xl mx-auto">
-            كل ما تحتاجه للمعاملات الآمنة والموثوقة
-          </p>
-          <div className="grid md:grid-cols-3 gap-8">
-            {features.map((feature, idx) => {
-              const Icon = feature.icon;
-              return (
-                <Card key={idx} className="p-8 bg-white hover:shadow-lg transition-all hover:scale-105">
-                  <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center mb-4">
-                    <Icon className="w-6 h-6 text-blue-600" />
-                  </div>
-                  <h3 className="text-xl font-bold text-slate-900 mb-3">{feature.title}</h3>
-                  <p className="text-slate-600">{feature.description}</p>
-                </Card>
-              );
-            })}
+        {/* الأكثر مبيعاً / عروض اليوم */}
+        <section className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600">
+                <TrendingUp size={24} />
+              </div>
+              <h3 className="text-2xl font-bold text-slate-900">الأكثر مبيعاً اليوم</h3>
+            </div>
           </div>
-        </div>
-      </section>
-
-      {/* Testimonials */}
-      <section className="py-20 px-4 bg-slate-100">
-        <div className="container max-w-6xl mx-auto">
-          <h2 className="text-4xl font-bold text-slate-900 mb-4 text-center">آراء المستخدمين</h2>
-          <p className="text-xl text-slate-600 text-center mb-16 max-w-2xl mx-auto">
-            ماذا يقول مستخدمونا عن وثّقلي؟
-          </p>
-          <div className="grid md:grid-cols-3 gap-8">
-            {testimonials.map((testimonial, idx) => (
-              <Card key={idx} className="p-8 bg-white">
-                <div className="flex gap-1 mb-4">
-                  {Array(testimonial.rating)
-                    .fill(0)
-                    .map((_, i) => (
-                      <Star key={i} className="w-5 h-5 fill-yellow-400 text-yellow-400" />
-                    ))}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+            {featuredOffers.map((offer) => (
+              <Card key={offer.id} className="overflow-hidden border-none bg-white rounded-[2rem] hover:shadow-2xl transition-all group cursor-pointer">
+                <div className="aspect-video relative overflow-hidden">
+                  <img src={offer.image} alt={offer.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                  <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full flex items-center gap-1 text-sm font-bold text-orange-600">
+                    <Star size={14} className="fill-orange-600" />
+                    4.9
+                  </div>
                 </div>
-                <p className="text-slate-600 mb-6 italic">"{testimonial.text}"</p>
-                <div>
-                  <p className="font-bold text-slate-900">{testimonial.name}</p>
-                  <p className="text-sm text-slate-500">{testimonial.role}</p>
+                <div className="p-6 space-y-4">
+                  <div className="space-y-1">
+                    <span className="text-xs font-bold text-orange-500 uppercase tracking-wider">
+                      {categories.find(c => c.id === offer.category)?.name}
+                    </span>
+                    <h4 className="text-xl font-bold text-slate-900 line-clamp-1">{offer.title}</h4>
+                  </div>
+                  <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                    <span className="text-2xl font-black text-slate-900">{offer.price}</span>
+                    <Button className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl px-6">
+                      اطلب الآن
+                    </Button>
+                  </div>
                 </div>
               </Card>
             ))}
           </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="py-20 px-4 bg-gradient-to-r from-blue-600 to-blue-700">
-        <div className="container max-w-6xl mx-auto text-center text-white">
-          <h2 className="text-4xl font-bold mb-6">هل أنت مستعد للبدء؟</h2>
-          <p className="text-xl mb-8 max-w-2xl mx-auto opacity-90">
-            انضم إلى آلاف المستخدمين الموثوقين على وثّقلي واستمتع بمعاملات آمنة وموثوقة
-          </p>
-          <div className="flex gap-4 justify-center">
-            <Button size="lg" variant="secondary" asChild>
-              <a href={getLoginUrl()}>
-                ابدأ الآن
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </a>
-            </Button>
-            <Button size="lg" variant="outline" className="text-white border-white hover:bg-white/10" asChild>
-              <Link href="/faq">اعرف أكثر</Link>
-            </Button>
-          </div>
-        </div>
-      </section>
+        </section>
+      </main>
 
       {/* Footer */}
-      <footer className="bg-slate-900 text-white py-12 px-4">
-        <div className="container max-w-6xl mx-auto">
-          <div className="grid md:grid-cols-4 gap-8 mb-8">
-            <div>
-              <div className="flex items-center gap-2 mb-4">
-                <Shield className="w-6 h-6 text-blue-400" />
-                <h3 className="font-bold">وثّقلي</h3>
+      <footer className="bg-white border-t border-slate-200 pt-16 pb-8 mt-20">
+        <div className="container mx-auto px-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
+            <div className="col-span-1 md:col-span-2 space-y-6">
+              <div className="flex items-center gap-2">
+                <div className="w-10 h-10 rounded-xl bg-orange-500 flex items-center justify-center">
+                  <Shield className="w-6 h-6 text-white" />
+                </div>
+                <span className="text-2xl font-black text-slate-900">وثّقلي</span>
               </div>
-              <p className="text-sm text-slate-400">منصة الوساطة الآمنة للمعاملات التجارية الرقمية</p>
+              <p className="text-slate-500 max-w-md leading-relaxed">
+                المنصة الليبية الأولى للوساطة الآمنة. نضمن لك تجربة تسوق وحجز خالية من المخاطر، سواء كنت تشتري حساب ألعاب، هاتف، أو تحجز استراحة.
+              </p>
             </div>
             <div>
-              <h4 className="font-bold mb-4">الروابط</h4>
-              <ul className="space-y-2 text-sm text-slate-400">
-                <li><Link href="/">الرئيسية</Link></li>
-                <li><Link href="/products">المنتجات</Link></li>
-                <li><Link href="/faq">الأسئلة الشائعة</Link></li>
+              <h5 className="font-bold text-slate-900 mb-6">روابط سريعة</h5>
+              <ul className="space-y-4 text-slate-500">
+                <li><Link href="/products" className="hover:text-orange-500 transition-colors">تصفح المنتجات</Link></li>
+                <li><Link href="/faq" className="hover:text-orange-500 transition-colors">الأسئلة الشائعة</Link></li>
+                <li><Link href="/terms" className="hover:text-orange-500 transition-colors">شروط الاستخدام</Link></li>
               </ul>
             </div>
             <div>
-              <h4 className="font-bold mb-4">القانوني</h4>
-              <ul className="space-y-2 text-sm text-slate-400">
-                <li><Link href="/terms">الشروط والأحكام</Link></li>
-                <li><a href="#">سياسة الخصوصية</a></li>
-                <li><a href="#">اتصل بنا</a></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-bold mb-4">الدعم</h4>
-              <ul className="space-y-2 text-sm text-slate-400">
-                <li><a href="#">مركز المساعدة</a></li>
-                <li><a href="#">البلاغات</a></li>
-                <li><a href="#">الشكاوى</a></li>
+              <h5 className="font-bold text-slate-900 mb-6">تواصل معنا</h5>
+              <ul className="space-y-4 text-slate-500">
+                <li>دعم فني 24/7</li>
+                <li>طرابلس، ليبيا</li>
+                <li>support@wathiqly.ly</li>
               </ul>
             </div>
           </div>
-          <div className="border-t border-slate-700 pt-8 text-center text-sm text-slate-400">
-            <p>&copy; 2026 وثّقلي - جميع الحقوق محفوظة</p>
+          <div className="border-t border-slate-100 pt-8 text-center text-slate-400 text-sm">
+            <p>© 2026 وثّقلي. صنع بكل حب في ليبيا 🇱🇾</p>
           </div>
         </div>
       </footer>

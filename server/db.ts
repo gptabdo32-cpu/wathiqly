@@ -11,6 +11,9 @@ import {
   InsertEscrow,
   digitalProducts,
   InsertDigitalProduct,
+  physicalProducts,
+  vehicles,
+  services,
   reviews,
   InsertReview,
   withdrawalRequests,
@@ -285,25 +288,85 @@ export async function getSellerProducts(sellerId: number, limit: number = 50, of
 export async function searchProducts(
   query: string,
   category?: string,
+  type: "digital" | "physical" | "vehicle" | "service" = "digital",
   limit: number = 50,
-  offset: number = 0
+  offset: number = 0,
+  filters?: {
+    minPrice?: string;
+    maxPrice?: string;
+    city?: string;
+    condition?: "new" | "used";
+    sortBy?: "newest" | "price-low" | "price-high" | "rating" | "popular";
+  }
 ) {
   const db = await getDb();
   if (!db) return [];
 
-  let conditions = [eq(digitalProducts.isActive, true)];
+  let table: any = digitalProducts;
+  if (type === "physical") table = physicalProducts;
+  else if (type === "vehicle") table = vehicles;
+  else if (type === "service") table = services;
 
-  if (category) {
-    conditions.push(eq(digitalProducts.category, category));
+  let conditions = [eq(table.isActive, true)];
+
+  if (category && category !== "all") {
+    conditions.push(eq(table.category, category));
   }
 
-  return await db
-    .select()
-    .from(digitalProducts)
-    .where(and(...conditions))
-    .orderBy(desc(digitalProducts.createdAt))
-    .limit(limit)
-    .offset(offset);
+  if (filters?.minPrice) {
+    conditions.push(gte(table.price, filters.minPrice));
+  }
+  if (filters?.maxPrice) {
+    conditions.push(lte(table.price, filters.maxPrice));
+  }
+  if (filters?.city) {
+    conditions.push(eq(table.city, filters.city));
+  }
+  if (filters?.condition && type !== "service") {
+    conditions.push(eq(table.condition, filters.condition));
+  }
+
+  let queryBuilder = db.select().from(table).where(and(...conditions));
+
+  // Sorting
+  if (filters?.sortBy === "price-low") {
+    queryBuilder = queryBuilder.orderBy(table.price);
+  } else if (filters?.sortBy === "price-high") {
+    queryBuilder = queryBuilder.orderBy(desc(table.price));
+  } else if (filters?.sortBy === "rating") {
+    queryBuilder = queryBuilder.orderBy(desc(table.averageRating));
+  } else if (filters?.sortBy === "popular" && type !== "vehicle" && type !== "service") {
+    queryBuilder = queryBuilder.orderBy(desc(table.salesCount));
+  } else {
+    queryBuilder = queryBuilder.orderBy(desc(table.createdAt));
+  }
+
+  return await queryBuilder.limit(limit).offset(offset);
+}
+
+export async function getFeaturedProducts() {
+  const db = await getDb();
+  if (!db) return [];
+
+  const digital = await db.select().from(digitalProducts).where(and(eq(digitalProducts.isActive, true), eq(digitalProducts.isFeatured, true))).limit(4);
+  const physical = await db.select().from(physicalProducts).where(and(eq(physicalProducts.isActive, true), eq(physicalProducts.isFeatured, true))).limit(4);
+  const vehicle = await db.select().from(vehicles).where(and(eq(vehicles.isActive, true), eq(vehicles.isFeatured, true))).limit(4);
+  const service = await db.select().from(services).where(and(eq(services.isActive, true), eq(services.isFeatured, true))).limit(4);
+
+  return { digital, physical, vehicle, service };
+}
+
+export async function getProductById(id: number, type: "digital" | "physical" | "vehicle" | "service") {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  let table: any = digitalProducts;
+  if (type === "physical") table = physicalProducts;
+  else if (type === "vehicle") table = vehicles;
+  else if (type === "service") table = services;
+
+  const result = await db.select().from(table).where(eq(table.id, id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
 }
 
 // ============ REVIEW OPERATIONS ============

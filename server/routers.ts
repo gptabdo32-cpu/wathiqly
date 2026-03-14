@@ -16,6 +16,8 @@ import {
   getDigitalProductById,
   getSellerProducts,
   searchProducts,
+  getFeaturedProducts,
+  getProductById,
   createReview,
   getUserReviews,
   hasCompletedTransaction,
@@ -549,12 +551,33 @@ export const appRouter = router({
         z.object({
           query: z.string(),
           category: z.string().optional(),
+          type: z.enum(["digital", "physical", "vehicle", "service"]).default("digital"),
           limit: z.number().default(50),
           offset: z.number().default(0),
+          filters: z.object({
+            minPrice: z.string().optional(),
+            maxPrice: z.string().optional(),
+            city: z.string().optional(),
+            condition: z.enum(["new", "used"]).optional(),
+            sortBy: z.enum(["newest", "price-low", "price-high", "rating", "popular"]).optional(),
+          }).optional(),
         })
       )
       .query(async ({ input }) => {
-        return await searchProducts(input.query, input.category, input.limit, input.offset);
+        return await searchProducts(input.query, input.category, input.type, input.limit, input.offset, input.filters);
+      }),
+
+    getFeatured: publicProcedure.query(async () => {
+      return await getFeaturedProducts();
+    }),
+
+    getById: publicProcedure
+      .input(z.object({ 
+        id: z.number(), 
+        type: z.enum(["digital", "physical", "vehicle", "service"]) 
+      }))
+      .query(async ({ input }) => {
+        return await getProductById(input.id, input.type);
       }),
   }),
 

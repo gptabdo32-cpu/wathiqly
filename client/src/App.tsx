@@ -10,6 +10,7 @@ import Dashboard from './pages/Dashboard';
 import Profile from './pages/Profile';
 import CreateTransaction from './pages/CreateTransaction';
 import Products from './pages/Products';
+import ProductDetail from './pages/ProductDetail';
 import SelectUserType from './pages/SelectUserType';
 import AdminDashboard from './pages/AdminDashboard';
 import FAQ from './pages/FAQ';
@@ -26,6 +27,7 @@ function Router() {
       <Route path={'/profile'} component={Profile} />
       <Route path={'/create-transaction'} component={CreateTransaction} />
       <Route path={'/products'} component={Products} />
+      <Route path={'/product/:type/:id'} component={ProductDetail} />
       <Route path={'/select-user-type'} component={SelectUserType} />
       <Route path={'/admin'} component={AdminDashboard} />
       <Route path={'/faq'} component={FAQ} />

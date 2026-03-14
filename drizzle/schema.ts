@@ -217,12 +217,92 @@ export const digitalProducts = mysqlTable("digitalProducts", {
   averageRating: decimal("averageRating", { precision: 3, scale: 2 }).default("0"),
   totalReviews: int("totalReviews").default(0),
   
+  // New fields for enhanced store
+  city: varchar("city", { length: 100 }),
+  condition: mysqlEnum("condition", ["new", "used"]).default("new"),
+  specifications: json("specifications"), // Detailed specs like { "level": 50, "skins": 100 }
+  images: json("images"), // Array of image URLs
+  isFeatured: boolean("isFeatured").default(false),
+  salesCount: int("salesCount").default(0),
+
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
 export type DigitalProduct = typeof digitalProducts.$inferSelect;
 export type InsertDigitalProduct = typeof digitalProducts.$inferInsert;
+
+/**
+ * Physical Products table
+ */
+export const physicalProducts = mysqlTable("physicalProducts", {
+  id: int("id").autoincrement().primaryKey(),
+  sellerId: int("sellerId").notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  category: varchar("category", { length: 100 }).notNull(), // e.g., "phones", "watches", "accessories"
+  price: decimal("price", { precision: 15, scale: 2 }).notNull(),
+  thumbnailUrl: text("thumbnailUrl"),
+  images: json("images"),
+  city: varchar("city", { length: 100 }),
+  condition: mysqlEnum("condition", ["new", "used"]).default("new"),
+  brand: varchar("brand", { length: 100 }),
+  specifications: json("specifications"),
+  isActive: boolean("isActive").default(true),
+  isFeatured: boolean("isFeatured").default(false),
+  averageRating: decimal("averageRating", { precision: 3, scale: 2 }).default("0"),
+  totalReviews: int("totalReviews").default(0),
+  salesCount: int("salesCount").default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+/**
+ * Vehicles table
+ */
+export const vehicles = mysqlTable("vehicles", {
+  id: int("id").autoincrement().primaryKey(),
+  sellerId: int("sellerId").notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  category: varchar("category", { length: 100 }).notNull(), // e.g., "cars", "bikes", "trucks"
+  price: decimal("price", { precision: 15, scale: 2 }).notNull(),
+  thumbnailUrl: text("thumbnailUrl"),
+  images: json("images"),
+  city: varchar("city", { length: 100 }),
+  year: int("year"),
+  mileage: int("mileage"),
+  transmission: mysqlEnum("transmission", ["manual", "automatic"]),
+  fuelType: mysqlEnum("fuelType", ["petrol", "diesel", "hybrid", "electric"]),
+  condition: mysqlEnum("condition", ["new", "used"]).default("used"),
+  isActive: boolean("isActive").default(true),
+  isFeatured: boolean("isFeatured").default(false),
+  averageRating: decimal("averageRating", { precision: 3, scale: 2 }).default("0"),
+  totalReviews: int("totalReviews").default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+/**
+ * Services table
+ */
+export const services = mysqlTable("services", {
+  id: int("id").autoincrement().primaryKey(),
+  sellerId: int("sellerId").notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  category: varchar("category", { length: 100 }).notNull(), // e.g., "hotels", "resorts", "weddings", "trips"
+  price: decimal("price", { precision: 15, scale: 2 }).notNull(), // Starting price or fixed price
+  thumbnailUrl: text("thumbnailUrl"),
+  images: json("images"),
+  city: varchar("city", { length: 100 }),
+  isActive: boolean("isActive").default(true),
+  isFeatured: boolean("isFeatured").default(false),
+  averageRating: decimal("averageRating", { precision: 3, scale: 2 }).default("0"),
+  totalReviews: int("totalReviews").default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
 
 /**
  * Product Purchases table - tracks purchases of digital products
