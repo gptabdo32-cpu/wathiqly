@@ -1,8 +1,17 @@
 import crypto from "crypto";
 
+/**
+ * Generates a cryptographically secure 6-digit OTP.
+ * Replaces Math.random() which is not suitable for security purposes.
+ */
 export function generateOTP(): string {
-  // Generate a 6-digit OTP
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  // Generate 4 bytes of random data
+  const buffer = crypto.randomBytes(4);
+  // Convert to a 32-bit unsigned integer
+  const randomInt = buffer.readUInt32BE(0);
+  // Scale to a 6-digit number (100,000 to 999,999)
+  const otp = (randomInt % 900000) + 100000;
+  return otp.toString();
 }
 
 export async function sendSMS(phoneNumber: string, message: string): Promise<void> {
