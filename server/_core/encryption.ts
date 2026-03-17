@@ -1,11 +1,12 @@
 import crypto from "crypto";
+import { ENV } from "./env.js";
 
 /**
  * Encryption utility for sensitive data (payment details, personal information)
  * Uses AES-256-GCM for authenticated encryption
  */
 
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
+const ENCRYPTION_KEY = ENV.encryptionKey;
 
 if (!ENCRYPTION_KEY) {
   throw new Error("ENCRYPTION_KEY environment variable is not set. Please set a strong, persistent key for production.");

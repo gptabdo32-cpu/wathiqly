@@ -10,22 +10,29 @@ const t = initTRPC.context<TrpcContext>().create({
 export const router = t.router;
 export const publicProcedure = t.procedure;
 
-  const requireUser = t.middleware(async opts => {
+/**
+ * Middleware for CSRF protection.
+ * Ensures that non-GET requests have the 'x-trpc-source' header.
+ */
+const csrfMiddleware = t.middleware(async (opts) => {
   const { ctx, next } = opts;
-
-  // Basic CSRF protection: Ensure requests have a custom header
-  // Browser-based CSRF attacks typically cannot set custom headers
   if (ctx.req.method !== "GET" && !ctx.req.headers["x-trpc-source"]) {
-    throw new TRPCError({ 
-      code: "FORBIDDEN", 
-      message: "CSRF protection: Missing required header" 
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "CSRF protection: Missing required header",
     });
   }
+  return next();
+});
 
+/**
+ * Middleware to ensure the user is authenticated.
+ */
+const requireUser = t.middleware(async (opts) => {
+  const { ctx, next } = opts;
   if (!ctx.user) {
     throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
   }
-
   return next({
     ctx: {
       ...ctx,
@@ -34,21 +41,28 @@ export const publicProcedure = t.procedure;
   });
 });
 
-export const protectedProcedure = t.procedure.use(requireUser);
+/**
+ * Middleware to ensure the user has an admin role.
+ */
+const requireAdmin = t.middleware(async (opts) => {
+  const { ctx, next } = opts;
+  if (!ctx.user || ctx.user.role !== "admin") {
+    throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+  }
+  return next({
+    ctx: {
+      ...ctx,
+      user: ctx.user,
+    },
+  });
+});
 
-export const adminProcedure = t.procedure.use(
-  t.middleware(async opts => {
-    const { ctx, next } = opts;
+// Procedures
+export const protectedProcedure = t.procedure
+  .use(csrfMiddleware)
+  .use(requireUser);
 
-    if (!ctx.user || ctx.user.role !== 'admin') {
-      throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
-    }
-
-    return next({
-      ctx: {
-        ...ctx,
-        user: ctx.user,
-      },
-    });
-  }),
-);
+export const adminProcedure = t.procedure
+  .use(csrfMiddleware)
+  .use(requireUser)
+  .use(requireAdmin);

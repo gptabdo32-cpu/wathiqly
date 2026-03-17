@@ -76,25 +76,37 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
     return null;
   }
 
+  // Sanitize ID and keys to prevent CSS injection
+  const safeId = id.replace(/[^a-zA-Z0-9_-]/g, "");
+
+  const styleContent = Object.entries(THEMES)
+    .map(([theme, prefix]) => {
+      const safePrefix = prefix === ".dark" ? ".dark" : "";
+      const rules = colorConfig
+        .map(([key, itemConfig]) => {
+          const safeKey = key.replace(/[^a-zA-Z0-9_-]/g, "");
+          const color =
+            itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ||
+            itemConfig.color;
+
+          // Validate color format (hex, rgb, hsl, or named color)
+          const isSafeColor =
+            color &&
+            /^(#[0-9a-fA-F]{3,8}|(rgba?|hsla?)\([^)]+\)|[a-zA-Z]+)$/.test(color);
+
+          return isSafeColor ? `  --color-${safeKey}: ${color};` : null;
+        })
+        .filter(Boolean)
+        .join("\n");
+
+      return rules ? `${safePrefix} [data-chart=${safeId}] {\n${rules}\n}` : "";
+    })
+    .join("\n");
+
   return (
     <style
       dangerouslySetInnerHTML={{
-        __html: Object.entries(THEMES)
-          .map(
-            ([theme, prefix]) => `
-${prefix} [data-chart=${id}] {
-${colorConfig
-  .map(([key, itemConfig]) => {
-    const color =
-      itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ||
-      itemConfig.color;
-    return color ? `  --color-${key}: ${color};` : null;
-  })
-  .join("\n")}
-}
-`
-          )
-          .join("\n"),
+        __html: styleContent,
       }}
     />
   );
@@ -178,7 +190,7 @@ function ChartTooltipContent({
       {!nestLabel ? tooltipLabel : null}
       <div className="grid gap-1.5">
         {payload
-          .filter(item => item.type !== "none")
+          .filter((item) => item.type !== "none")
           .map((item, index) => {
             const key = `${nameKey || item.name || item.dataKey || "value"}`;
             const itemConfig = getPayloadConfigFromPayload(config, item, key);
@@ -276,8 +288,8 @@ function ChartLegendContent({
       )}
     >
       {payload
-        .filter(item => item.type !== "none")
-        .map(item => {
+        .filter((item) => item.type !== "none")
+        .map((item) => {
           const key = `${nameKey || item.dataKey || "value"}`;
           const itemConfig = getPayloadConfigFromPayload(config, item, key);
 
