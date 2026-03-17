@@ -20,6 +20,7 @@ import Messaging from './pages/Messaging';
 import IdentityVerification from './pages/IdentityVerification';
 import AdvancedPayment from './pages/AdvancedPayment';
 import WalletID from './pages/WalletID';
+import BusinessDashboard from './pages/BusinessDashboard';
 
 function Router() {
   return (
@@ -39,6 +40,7 @@ function Router() {
       <Route path={"/wallet"} component={WalletManagement} />
       <Route path={"/payment"} component={AdvancedPayment} />
       <Route path={"/wallet-id"} component={WalletID} />
+      <Route path={"/business"} component={BusinessDashboard} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

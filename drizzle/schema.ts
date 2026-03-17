@@ -717,3 +717,8 @@ export const identityVerifications = mysqlTable("identity_verifications", {
 
 export type IdentityVerification = typeof identityVerifications.$inferSelect;
 export type InsertIdentityVerification = typeof identityVerifications.$inferInsert;
+
+/**
+ * Export DIaaS schema tables
+ */
+export * from "./schema_diaas";

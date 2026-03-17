@@ -38,6 +38,7 @@ import { Decimal } from "decimal.js";
 import { chatRouter } from "./routers/chat";
 import { paymentAdminRouter } from "./routers/payment-admin";
 import { walletIdEnhancedRouter } from "./routers/wallet_id_enhanced";
+import { diaasRouter } from "./routers/diaas";
 
 const COMMISSIONS: Record<string, number> = {
   phone_credit: 0.30,
@@ -887,6 +888,9 @@ export const appRouter = router({
 
   // ============ CHAT OPERATIONS ============
   chat: chatRouter,
+
+  // ============ DIAAS OPERATIONS ============
+  diaas: diaasRouter,
 });
 
 export type AppRouter = typeof appRouter;
