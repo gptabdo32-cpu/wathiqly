@@ -37,6 +37,7 @@ import { encryptData } from "./_core/encryption";
 import { Decimal } from "decimal.js";
 import { chatRouter } from "./routers/chat";
 import { paymentAdminRouter } from "./routers/payment-admin";
+import { walletIdRouter } from "./routers/wallet_id";
 
 const COMMISSIONS: Record<string, number> = {
   phone_credit: 0.30,
@@ -54,6 +55,7 @@ import { TRPCError } from "@trpc/server";
 export const appRouter = router({
   system: systemRouter,
   paymentAdmin: paymentAdminRouter,
+  walletId: walletIdRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
