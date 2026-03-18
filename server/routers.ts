@@ -45,6 +45,7 @@ import { smartEscrowRouter } from "./routers/smartEscrow";
 import { trustRouter } from "./routers/trust";
 import { livenessRouter } from "./routers/liveness";
 import { behavioralRouter } from "./routers/behavioral";
+import { fraudRouter } from "./routers/fraud";
 
 const COMMISSIONS: Record<string, number> = {
   phone_credit: 0.30,
@@ -66,6 +67,7 @@ export const appRouter = router({
   trust: trustRouter,
   liveness: livenessRouter,
   behavioral: behavioralRouter,
+  fraud: fraudRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
@@ -904,6 +906,7 @@ export const appRouter = router({
   // ============ LIVENESS DETECTION OPERATIONS ============
   liveness: livenessRouter,
   behavioral: behavioralRouter,
+  fraud: fraudRouter,
 });
 
 export type AppRouter = typeof appRouter;

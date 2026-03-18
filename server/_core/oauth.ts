@@ -1,6 +1,7 @@
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import type { Express, Request, Response } from "express";
 import * as db from "../db";
+import { FraudDetector } from "../fraud_ai_logic";
 import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
 
@@ -40,6 +41,16 @@ export function registerOAuthRoutes(app: Express) {
         name: userInfo.name || "",
         expiresInMs: ONE_YEAR_MS,
       });
+
+      // Record login for Fraud Detection Graph
+      const user = await db.getUserByOpenId(userInfo.openId);
+      if (user) {
+        FraudDetector.recordLogin(
+          user.id,
+          req.headers["user-agent"] || "unknown",
+          req.ip || "unknown"
+        ).catch(err => console.error("[FraudGraph] Record login failed:", err));
+      }
 
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });

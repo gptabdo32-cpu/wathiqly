@@ -172,3 +172,4 @@ export * from "./schema_new_features";
 export * from "./schema_smart_escrow";
 export * from "./schema_trust_system";
 export * from "./schema_wallet_id";
+export * from "./schema_fraud_graph";
