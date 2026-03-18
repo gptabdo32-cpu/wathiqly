@@ -20,6 +20,7 @@ import {
   ArrowRight,
   Info,
 } from "lucide-react";
+import { SmartEscrowDetails } from "@/components/SmartEscrowDetails";
 
 export default function ProductDetail() {
   const { user, isAuthenticated } = useAuth();
@@ -143,6 +144,15 @@ export default function ProductDetail() {
                 </div>
               )}
             </Card>
+
+            {/* 4️⃣ نظام الضمان الذكي (Smart Escrow) */}
+            <div className="mt-8">
+              <h3 className="text-2xl font-black text-slate-900 mb-6">نظام الضمان الذكي</h3>
+              <SmartEscrowDetails 
+                escrowId={parseInt(id)} 
+                dealType={type === "service" ? "service" : "physical"} 
+              />
+            </div>
 
             {/* 5️⃣ تقييمات العملاء */}
             <Card className="p-8 border-none shadow-sm rounded-[2rem] bg-white space-y-8">
