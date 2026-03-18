@@ -32,7 +32,9 @@ import {
   updateUserProfile,
 } from "./db";
 import { adminRouter } from "./routers/admin";
+import { depositRequests, withdrawalRequests, transactions, wallets } from "./db";
 import { verificationRouter } from "./routers/verification";
+import { getDb } from "./db";
 import { encryptData } from "./_core/encryption";
 import { Decimal } from "decimal.js";
 import { chatRouter } from "./routers/chat";
@@ -41,6 +43,7 @@ import { walletIdEnhancedRouter } from "./routers/wallet_id_enhanced";
 import { diaasRouter } from "./routers/diaas";
 import { smartEscrowRouter } from "./routers/smartEscrow";
 import { trustRouter } from "./routers/trust";
+import { livenessRouter } from "./routers/liveness";
 
 const COMMISSIONS: Record<string, number> = {
   phone_credit: 0.30,
@@ -51,8 +54,7 @@ const COMMISSIONS: Record<string, number> = {
   edfaali: 0.01,
   cash: 0.00,
 };
-import { eq } from "drizzle-orm";
-import { desc } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 
 export const appRouter = router({
@@ -61,6 +63,7 @@ export const appRouter = router({
   walletId: walletIdEnhancedRouter,
   smartEscrow: smartEscrowRouter,
   trust: trustRouter,
+  liveness: livenessRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
@@ -820,7 +823,7 @@ export const appRouter = router({
 
   // ============ TRUSTED SELLER OPERATIONS ============
   admin: adminRouter,
-  verify: verificationRouter,
+  verification: verificationRouter,
   trustedSeller: router({
     subscribeToPlan: protectedProcedure
       .input(
@@ -895,6 +898,9 @@ export const appRouter = router({
 
   // ============ DIAAS OPERATIONS ============
   diaas: diaasRouter,
+
+  // ============ LIVENESS DETECTION OPERATIONS ============
+  liveness: livenessRouter,
 });
 
 export type AppRouter = typeof appRouter;
