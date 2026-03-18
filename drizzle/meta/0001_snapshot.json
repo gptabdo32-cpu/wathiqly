@@ -1,11 +1,11 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "050943f7-f6d1-4aad-bf01-b33da0e480cd",
-  "prevId": "b9a658f4-8e85-42ac-954e-18702af864bb",
+  "id": "69f5db58-ee97-4972-948d-f3a6e07df2ca",
+  "prevId": "3b334464-45b5-4a40-851b-f442d616c1f3",
   "tables": {
-    "adminLogs": {
-      "name": "adminLogs",
+    "liveness_analysis_results": {
+      "name": "liveness_analysis_results",
       "columns": {
         "id": {
           "name": "id",
@@ -14,455 +14,135 @@
           "notNull": true,
           "autoincrement": true
         },
-        "adminId": {
-          "name": "adminId",
+        "sessionId": {
+          "name": "sessionId",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "frameNumber": {
+          "name": "frameNumber",
           "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "action": {
-          "name": "action",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "targetType": {
-          "name": "targetType",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "targetId": {
-          "name": "targetId",
+        "timestamp": {
+          "name": "timestamp",
           "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "details": {
-          "name": "details",
-          "type": "json",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "adminLogs_id": {
-          "name": "adminLogs_id",
-          "columns": [
-            "id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraint": {}
-    },
-    "digitalProducts": {
-      "name": "digitalProducts",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "sellerId": {
-          "name": "sellerId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "title": {
-          "name": "title",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "category": {
-          "name": "category",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "price": {
-          "name": "price",
-          "type": "decimal(15,2)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "thumbnailUrl": {
-          "name": "thumbnailUrl",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "previewUrl": {
-          "name": "previewUrl",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "deliveryType": {
-          "name": "deliveryType",
-          "type": "enum('instant','manual','email')",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'manual'"
-        },
-        "productCodes": {
-          "name": "productCodes",
-          "type": "json",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "isActive": {
-          "name": "isActive",
+        "eyeBlinkDetected": {
+          "name": "eyeBlinkDetected",
           "type": "boolean",
           "primaryKey": false,
           "notNull": false,
-          "autoincrement": false,
-          "default": true
+          "autoincrement": false
         },
-        "averageRating": {
-          "name": "averageRating",
+        "eyeAspectRatio": {
+          "name": "eyeAspectRatio",
+          "type": "decimal(5,3)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "leftEyeOpen": {
+          "name": "leftEyeOpen",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rightEyeOpen": {
+          "name": "rightEyeOpen",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "smileDetected": {
+          "name": "smileDetected",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "smileIntensity": {
+          "name": "smileIntensity",
           "type": "decimal(3,2)",
           "primaryKey": false,
           "notNull": false,
-          "autoincrement": false,
-          "default": "'0'"
-        },
-        "totalReviews": {
-          "name": "totalReviews",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": 0
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "onUpdate": true,
-          "default": "(now())"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "digitalProducts_id": {
-          "name": "digitalProducts_id",
-          "columns": [
-            "id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraint": {}
-    },
-    "disputeEvidence": {
-      "name": "disputeEvidence",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "escrowId": {
-          "name": "escrowId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
           "autoincrement": false
         },
-        "uploaderId": {
-          "name": "uploaderId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "fileUrl": {
-          "name": "fileUrl",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "fileType": {
-          "name": "fileType",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "disputeEvidence_id": {
-          "name": "disputeEvidence_id",
-          "columns": [
-            "id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraint": {}
-    },
-    "disputeMessages": {
-      "name": "disputeMessages",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "escrowId": {
-          "name": "escrowId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "senderId": {
-          "name": "senderId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "message": {
-          "name": "message",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "disputeMessages_id": {
-          "name": "disputeMessages_id",
-          "columns": [
-            "id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraint": {}
-    },
-    "escrows": {
-      "name": "escrows",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "title": {
-          "name": "title",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "buyerId": {
-          "name": "buyerId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "sellerId": {
-          "name": "sellerId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "amount": {
-          "name": "amount",
-          "type": "decimal(15,2)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "commissionPercentage": {
-          "name": "commissionPercentage",
+        "headYaw": {
+          "name": "headYaw",
           "type": "decimal(5,2)",
           "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'2.5'"
-        },
-        "commissionAmount": {
-          "name": "commissionAmount",
-          "type": "decimal(15,2)",
-          "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
-        "commissionPaidBy": {
-          "name": "commissionPaidBy",
-          "type": "enum('buyer','seller','split')",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'buyer'"
-        },
-        "dealType": {
-          "name": "dealType",
-          "type": "enum('physical','digital_account','service')",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'physical'"
-        },
-        "specifications": {
-          "name": "specifications",
-          "type": "json",
+        "headPitch": {
+          "name": "headPitch",
+          "type": "decimal(5,2)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "status": {
-          "name": "status",
-          "type": "enum('draft','funded','delivered','completed','disputed','cancelled')",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'draft'"
-        },
-        "fundedAt": {
-          "name": "fundedAt",
-          "type": "timestamp",
+        "headRoll": {
+          "name": "headRoll",
+          "type": "decimal(5,2)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "deliveredAt": {
-          "name": "deliveredAt",
-          "type": "timestamp",
+        "corneaReflectionDetected": {
+          "name": "corneaReflectionDetected",
+          "type": "boolean",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "completedAt": {
-          "name": "completedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "disputeRaisedAt": {
-          "name": "disputeRaisedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "disputeRaisedBy": {
-          "name": "disputeRaisedBy",
+        "reflectionCount": {
+          "name": "reflectionCount",
           "type": "int",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "disputeReason": {
-          "name": "disputeReason",
-          "type": "text",
+        "reflectionStability": {
+          "name": "reflectionStability",
+          "type": "decimal(3,2)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "disputeResolution": {
-          "name": "disputeResolution",
-          "type": "text",
+        "skinDistortionScore": {
+          "name": "skinDistortionScore",
+          "type": "decimal(3,2)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "disputeResolvedAt": {
-          "name": "disputeResolvedAt",
-          "type": "timestamp",
+        "textureAnalysisScore": {
+          "name": "textureAnalysisScore",
+          "type": "decimal(3,2)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "frequencyDomainScore": {
+          "name": "frequencyDomainScore",
+          "type": "decimal(3,2)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "frameScore": {
+          "name": "frameScore",
+          "type": "decimal(5,2)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -474,22 +154,27 @@
           "notNull": true,
           "autoincrement": false,
           "default": "(now())"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "onUpdate": true,
-          "default": "(now())"
         }
       },
       "indexes": {},
-      "foreignKeys": {},
+      "foreignKeys": {
+        "liveness_analysis_results_sessionId_liveness_sessions_sessionId_fk": {
+          "name": "liveness_analysis_results_sessionId_liveness_sessions_sessionId_fk",
+          "tableFrom": "liveness_analysis_results",
+          "tableTo": "liveness_sessions",
+          "columnsFrom": [
+            "sessionId"
+          ],
+          "columnsTo": [
+            "sessionId"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {
-        "escrows_id": {
-          "name": "escrows_id",
+        "liveness_analysis_results_id": {
+          "name": "liveness_analysis_results_id",
           "columns": [
             "id"
           ]
@@ -498,8 +183,8 @@
       "uniqueConstraints": {},
       "checkConstraint": {}
     },
-    "notifications": {
-      "name": "notifications",
+    "liveness_sessions": {
+      "name": "liveness_sessions",
       "columns": {
         "id": {
           "name": "id",
@@ -515,255 +200,90 @@
           "notNull": true,
           "autoincrement": false
         },
-        "type": {
-          "name": "type",
-          "type": "enum('transaction','dispute','system','marketing')",
+        "sessionId": {
+          "name": "sessionId",
+          "type": "varchar(64)",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
-        },
-        "title": {
-          "name": "title",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "message": {
-          "name": "message",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "isRead": {
-          "name": "isRead",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": false
-        },
-        "link": {
-          "name": "link",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "notifications_id": {
-          "name": "notifications_id",
-          "columns": [
-            "id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraint": {}
-    },
-    "platformSettings": {
-      "name": "platformSettings",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "platformName": {
-          "name": "platformName",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'وثّقلي'"
-        },
-        "platformDescription": {
-          "name": "platformDescription",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "contactEmail": {
-          "name": "contactEmail",
-          "type": "varchar(320)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "supportPhone": {
-          "name": "supportPhone",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "escrowCommissionPercentage": {
-          "name": "escrowCommissionPercentage",
-          "type": "decimal(5,2)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'2.5'"
-        },
-        "productCommissionPercentage": {
-          "name": "productCommissionPercentage",
-          "type": "decimal(5,2)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'5.0'"
-        },
-        "minWithdrawalAmount": {
-          "name": "minWithdrawalAmount",
-          "type": "decimal(15,2)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'10.0'"
-        },
-        "isRegistrationEnabled": {
-          "name": "isRegistrationEnabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": true
-        },
-        "isEscrowEnabled": {
-          "name": "isEscrowEnabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": true
-        },
-        "isProductMarketplaceEnabled": {
-          "name": "isProductMarketplaceEnabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": true
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "onUpdate": true,
-          "default": "(now())"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "platformSettings_id": {
-          "name": "platformSettings_id",
-          "columns": [
-            "id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraint": {}
-    },
-    "productPurchases": {
-      "name": "productPurchases",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "productId": {
-          "name": "productId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "buyerId": {
-          "name": "buyerId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "sellerId": {
-          "name": "sellerId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "quantity": {
-          "name": "quantity",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "pricePerUnit": {
-          "name": "pricePerUnit",
-          "type": "decimal(15,2)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "totalPrice": {
-          "name": "totalPrice",
-          "type": "decimal(15,2)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "commissionPercentage": {
-          "name": "commissionPercentage",
-          "type": "decimal(5,2)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'2.5'"
-        },
-        "commissionAmount": {
-          "name": "commissionAmount",
-          "type": "decimal(15,2)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "deliveredCodes": {
-          "name": "deliveredCodes",
-          "type": "json",
-          "primaryKey": false,
-          "notNull": false,
           "autoincrement": false
         },
         "status": {
           "name": "status",
-          "type": "enum('pending','completed','cancelled')",
+          "type": "enum('pending','in_progress','completed','failed')",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
           "default": "'pending'"
+        },
+        "challenges": {
+          "name": "challenges",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "completedChallenges": {
+          "name": "completedChallenges",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "videoUrl": {
+          "name": "videoUrl",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "videoKey": {
+          "name": "videoKey",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "videoDuration": {
+          "name": "videoDuration",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "livenessScore": {
+          "name": "livenessScore",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "riskScore": {
+          "name": "riskScore",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "isLive": {
+          "name": "isLive",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "analysisResults": {
+          "name": "analysisResults",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "startedAt": {
+          "name": "startedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
         },
         "completedAt": {
           "name": "completedAt",
@@ -791,20 +311,41 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {},
+      "foreignKeys": {
+        "liveness_sessions_userId_users_id_fk": {
+          "name": "liveness_sessions_userId_users_id_fk",
+          "tableFrom": "liveness_sessions",
+          "tableTo": "users",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {
-        "productPurchases_id": {
-          "name": "productPurchases_id",
+        "liveness_sessions_id": {
+          "name": "liveness_sessions_id",
           "columns": [
             "id"
           ]
         }
       },
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "liveness_sessions_sessionId_unique": {
+          "name": "liveness_sessions_sessionId_unique",
+          "columns": [
+            "sessionId"
+          ]
+        }
+      },
       "checkConstraint": {}
     },
-    "reviews": {
-      "name": "reviews",
+    "presentation_attack_logs": {
+      "name": "presentation_attack_logs",
       "columns": {
         "id": {
           "name": "id",
@@ -813,269 +354,121 @@
           "notNull": true,
           "autoincrement": true
         },
-        "revieweeId": {
-          "name": "revieweeId",
-          "type": "int",
+        "sessionId": {
+          "name": "sessionId",
+          "type": "varchar(64)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "reviewerId": {
-          "name": "reviewerId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "escrowId": {
-          "name": "escrowId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "productPurchaseId": {
-          "name": "productPurchaseId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "rating": {
-          "name": "rating",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "comment": {
-          "name": "comment",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "reviewType": {
-          "name": "reviewType",
-          "type": "enum('seller','buyer','product')",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "sellerResponse": {
-          "name": "sellerResponse",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sellerResponseAt": {
-          "name": "sellerResponseAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "onUpdate": true,
-          "default": "(now())"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "reviews_id": {
-          "name": "reviews_id",
-          "columns": [
-            "id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraint": {}
-    },
-    "transactions": {
-      "name": "transactions",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "userId": {
-          "name": "userId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "type": {
-          "name": "type",
-          "type": "enum('deposit','withdrawal','commission','refund','transfer')",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "amount": {
-          "name": "amount",
-          "type": "decimal(15,2)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "status": {
-          "name": "status",
-          "type": "enum('pending','completed','failed','cancelled')",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'pending'"
-        },
-        "escrowId": {
-          "name": "escrowId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "productPurchaseId": {
-          "name": "productPurchaseId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "withdrawalRequestId": {
-          "name": "withdrawalRequestId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "reference": {
-          "name": "reference",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "onUpdate": true,
-          "default": "(now())"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "transactions_id": {
-          "name": "transactions_id",
-          "columns": [
-            "id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraint": {}
-    },
-    "trustedSellerSubscriptions": {
-      "name": "trustedSellerSubscriptions",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "userId": {
-          "name": "userId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "planName": {
-          "name": "planName",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "monthlyPrice": {
-          "name": "monthlyPrice",
-          "type": "decimal(15,2)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "startDate": {
-          "name": "startDate",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "endDate": {
-          "name": "endDate",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "isActive": {
-          "name": "isActive",
+        "printAttackDetected": {
+          "name": "printAttackDetected",
           "type": "boolean",
           "primaryKey": false,
           "notNull": false,
-          "autoincrement": false,
-          "default": true
+          "autoincrement": false
         },
-        "autoRenew": {
-          "name": "autoRenew",
+        "videoReplayDetected": {
+          "name": "videoReplayDetected",
           "type": "boolean",
           "primaryKey": false,
           "notNull": false,
-          "autoincrement": false,
-          "default": true
+          "autoincrement": false
         },
-        "benefits": {
-          "name": "benefits",
-          "type": "json",
+        "maskAttackDetected": {
+          "name": "maskAttackDetected",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deepfakeDetected": {
+          "name": "deepfakeDetected",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "injectionAttackDetected": {
+          "name": "injectionAttackDetected",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "printAttackProbability": {
+          "name": "printAttackProbability",
+          "type": "decimal(3,2)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "videoReplayProbability": {
+          "name": "videoReplayProbability",
+          "type": "decimal(3,2)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "maskAttackProbability": {
+          "name": "maskAttackProbability",
+          "type": "decimal(3,2)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deepfakeProbability": {
+          "name": "deepfakeProbability",
+          "type": "decimal(3,2)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "injectionAttackProbability": {
+          "name": "injectionAttackProbability",
+          "type": "decimal(3,2)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "textureAnalysis": {
+          "name": "textureAnalysis",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "frequencyAnalysis": {
+          "name": "frequencyAnalysis",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "physiologicalAnalysis": {
+          "name": "physiologicalAnalysis",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "overallRiskScore": {
+          "name": "overallRiskScore",
+          "type": "decimal(5,2)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "isPresentationAttack": {
+          "name": "isPresentationAttack",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "confidence": {
+          "name": "confidence",
+          "type": "decimal(3,2)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -1087,22 +480,27 @@
           "notNull": true,
           "autoincrement": false,
           "default": "(now())"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "onUpdate": true,
-          "default": "(now())"
         }
       },
       "indexes": {},
-      "foreignKeys": {},
+      "foreignKeys": {
+        "presentation_attack_logs_sessionId_liveness_sessions_sessionId_fk": {
+          "name": "presentation_attack_logs_sessionId_liveness_sessions_sessionId_fk",
+          "tableFrom": "presentation_attack_logs",
+          "tableTo": "liveness_sessions",
+          "columnsFrom": [
+            "sessionId"
+          ],
+          "columnsTo": [
+            "sessionId"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {
-        "trustedSellerSubscriptions_id": {
-          "name": "trustedSellerSubscriptions_id",
+        "presentation_attack_logs_id": {
+          "name": "presentation_attack_logs_id",
           "columns": [
             "id"
           ]
@@ -1142,13 +540,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "phone": {
-          "name": "phone",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "loginMethod": {
           "name": "loginMethod",
           "type": "varchar(64)",
@@ -1163,111 +554,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'user'"
-        },
-        "userType": {
-          "name": "userType",
-          "type": "enum('buyer','seller','both')",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'buyer'"
-        },
-        "profileImage": {
-          "name": "profileImage",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "bio": {
-          "name": "bio",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "city": {
-          "name": "city",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "isEmailVerified": {
-          "name": "isEmailVerified",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": false
-        },
-        "isPhoneVerified": {
-          "name": "isPhoneVerified",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": false
-        },
-        "isIdentityVerified": {
-          "name": "isIdentityVerified",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": false
-        },
-        "identityDocumentUrl": {
-          "name": "identityDocumentUrl",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "identityVerifiedAt": {
-          "name": "identityVerifiedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "phoneNumberVerifiedAt": {
-          "name": "phoneNumberVerifiedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "isTrustedSeller": {
-          "name": "isTrustedSeller",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": false
-        },
-        "trustedSellerExpiresAt": {
-          "name": "trustedSellerExpiresAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "isActive": {
-          "name": "isActive",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": true
-        },
-        "isSuspended": {
-          "name": "isSuspended",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": false
         },
         "createdAt": {
           "name": "createdAt",
@@ -1315,16 +601,9 @@
       },
       "checkConstraint": {}
     },
-    "wallets": {
-      "name": "wallets",
+    "users_liveness": {
+      "name": "users_liveness",
       "columns": {
-        "id": {
-          "name": "id",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": true
-        },
         "userId": {
           "name": "userId",
           "type": "int",
@@ -1332,37 +611,49 @@
           "notNull": true,
           "autoincrement": false
         },
-        "balance": {
-          "name": "balance",
-          "type": "decimal(15,2)",
+        "livenessVerifiedAt": {
+          "name": "livenessVerifiedAt",
+          "type": "timestamp",
           "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'0'"
+          "notNull": false,
+          "autoincrement": false
         },
-        "pendingBalance": {
-          "name": "pendingBalance",
-          "type": "decimal(15,2)",
+        "livenessScore": {
+          "name": "livenessScore",
+          "type": "int",
           "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'0'"
+          "notNull": false,
+          "autoincrement": false
         },
-        "totalEarned": {
-          "name": "totalEarned",
-          "type": "decimal(15,2)",
+        "lastLivenessSessionId": {
+          "name": "lastLivenessSessionId",
+          "type": "varchar(64)",
           "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'0'"
+          "notNull": false,
+          "autoincrement": false
         },
-        "totalWithdrawn": {
-          "name": "totalWithdrawn",
-          "type": "decimal(15,2)",
+        "livenessVerificationCount": {
+          "name": "livenessVerificationCount",
+          "type": "int",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false,
-          "default": "'0'"
+          "default": 0
+        },
+        "lastLivenessAttemptAt": {
+          "name": "lastLivenessAttemptAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "failedLivenessAttempts": {
+          "name": "failedLivenessAttempts",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": 0
         },
         "createdAt": {
           "name": "createdAt",
@@ -1383,110 +674,26 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "wallets_id": {
-          "name": "wallets_id",
-          "columns": [
+      "foreignKeys": {
+        "users_liveness_userId_users_id_fk": {
+          "name": "users_liveness_userId_users_id_fk",
+          "tableFrom": "users_liveness",
+          "tableTo": "users",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
             "id"
-          ]
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
-      "uniqueConstraints": {},
-      "checkConstraint": {}
-    },
-    "withdrawalRequests": {
-      "name": "withdrawalRequests",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "userId": {
-          "name": "userId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "amount": {
-          "name": "amount",
-          "type": "decimal(15,2)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "paymentMethod": {
-          "name": "paymentMethod",
-          "type": "enum('sadad','tadawul','edfaali','bank_transfer')",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "paymentDetails": {
-          "name": "paymentDetails",
-          "type": "json",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "status": {
-          "name": "status",
-          "type": "enum('pending','processing','completed','failed','cancelled')",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'pending'"
-        },
-        "adminNotes": {
-          "name": "adminNotes",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "processedBy": {
-          "name": "processedBy",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "processedAt": {
-          "name": "processedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "onUpdate": true,
-          "default": "(now())"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
       "compositePrimaryKeys": {
-        "withdrawalRequests_id": {
-          "name": "withdrawalRequests_id",
+        "users_liveness_userId": {
+          "name": "users_liveness_userId",
           "columns": [
-            "id"
+            "userId"
           ]
         }
       },
