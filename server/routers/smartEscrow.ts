@@ -17,8 +17,117 @@ import { getEscrowById, updateEscrowStatus } from "../db";
 import { encryptData, decryptData } from "../_core/encryption"; // Import encryption utilities
 import { generateSecureToken } from "../_core/utils"; // Assuming a utility to generate tokens
 import { createAuditLog } from "../db-enhanced";
+import { invokeLLM } from "../_core/llm";
+import { createAiArbitratorAnalysis, getLatestAiArbitratorAnalysis } from "../db_ai_arbitrator";
 
 export const smartEscrowRouter = router({
+  // ============ AI ARBITRATOR ============
+
+  analyzeEscrowContract: protectedProcedure
+    .input(z.object({ escrowId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const escrow = await getEscrowById(input.escrowId);
+      if (!escrow) throw new TRPCError({ code: "NOT_FOUND", message: "Escrow not found" });
+
+      // Only seller or buyer can request analysis
+      if (escrow.sellerId !== ctx.user.id && escrow.buyerId !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized" });
+      }
+
+      // Construct the contract text for LLM analysis
+      const contractText = `
+        عنوان العقد: ${escrow.title}
+        وصف العقد: ${escrow.description || 'لا يوجد وصف.'}
+        المبلغ: ${escrow.amount}
+        نوع الصفقة: ${escrow.dealType}
+        المواصفات: ${JSON.stringify(escrow.specifications || {})}
+        حالة العقد: ${escrow.status}
+        
+        الرجاء تحليل هذا العقد الذكي من منظور قانوني، مع التركيز على العدالة، الثغرات المحتملة، والبنود غير الواضحة. قم بتقديم ملخص باللغة العربية، ودرجة عدالة (0-100)، ومستوى المخاطر القانونية (low, medium, high, critical)، وأي ثغرات قانونية، وتوصيات لتحسين العقد، وتحليل مفصل للبنود الهامة.
+      `;
+
+      try {
+        const llmResponse = await invokeLLM({
+          messages: [
+            { role: "system", content: "أنت مساعد قانوني متخصص في تحليل العقود الذكية وتقديم المشورة القانونية." },
+            { role: "user", content: contractText },
+          ],
+          outputSchema: {
+            name: "LegalAnalysis",
+            schema: {
+              type: "object",
+              properties: {
+                fairnessScore: { type: "integer", minimum: 0, maximum: 100 },
+                legalRiskLevel: { type: "string", enum: ["low", "medium", "high", "critical"] },
+                loopholes: { type: "array", items: { type: "string" } },
+                recommendations: { type: "array", items: { type: "string" } },
+                clauses_analysis: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      clause: { type: "string" },
+                      status: { type: "string", enum: ["fair", "unfair", "ambiguous"] },
+                      comment: { type: "string" },
+                    },
+                    required: ["clause", "status", "comment"],
+                  },
+                },
+                summary: { type: "string" },
+              },
+              required: ["fairnessScore", "legalRiskLevel", "loopholes", "recommendations", "clauses_analysis", "summary"],
+            },
+          },
+        });
+
+        const analysisResults = llmResponse.choices[0].message.content as any;
+
+        const newAnalysis = await createAiArbitratorAnalysis({
+          escrowId: input.escrowId,
+          fairnessScore: analysisResults.fairnessScore,
+          legalRiskLevel: analysisResults.legalRiskLevel,
+          analysisResults: analysisResults,
+          summary: analysisResults.summary,
+          modelUsed: llmResponse.model,
+          tokensUsed: llmResponse.usage?.total_tokens,
+          status: "completed",
+        });
+
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "ai_arbitrator_analysis_completed",
+          entityType: "escrow",
+          entityId: input.escrowId,
+          newValue: { analysisId: newAnalysis.insertId, score: analysisResults.fairnessScore, risk: analysisResults.legalRiskLevel },
+        });
+
+        return { success: true, analysisId: newAnalysis.insertId };
+      } catch (error: any) {
+        console.error("AI Arbitrator analysis failed:", error);
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "ai_arbitrator_analysis_failed",
+          entityType: "escrow",
+          entityId: input.escrowId,
+          newValue: { error: error.message },
+        });
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to analyze contract with AI." });
+      }
+    }),
+
+  getEscrowAnalysis: protectedProcedure
+    .input(z.object({ escrowId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const escrow = await getEscrowById(input.escrowId);
+      if (!escrow) throw new TRPCError({ code: "NOT_FOUND", message: "Escrow not found" });
+
+      // Only seller or buyer can view analysis
+      if (escrow.sellerId !== ctx.user.id && escrow.buyerId !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized" });
+      }
+
+      return await getLatestAiArbitratorAnalysis(input.escrowId);
+    }),
   // ============ MILESTONES ============
   
   /**
