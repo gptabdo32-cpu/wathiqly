@@ -22,7 +22,7 @@ export const escrowMilestones = mysqlTable("escrowMilestones", {
   status: mysqlEnum("status", ["pending", "in_progress", "completed", "released", "disputed"]).default("pending").notNull(),
   
   // Verification criteria (e.g., GitHub PR, Design Link)
-  verificationType: mysqlEnum("verificationType", ["manual", "github_commit", "github_pr", "url_check", "external_api"]).default("manual"),
+  verificationType: mysqlEnum("verificationType", ["manual", "github_commit", "github_pr", "url_check"]).default("manual"),
   verificationData: json("verificationData"), // { repo: "owner/repo", prNumber: 123 }
   
   completedAt: timestamp("completedAt"),
