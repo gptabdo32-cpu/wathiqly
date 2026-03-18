@@ -9,6 +9,7 @@ import { trpc } from "@/lib/trpc";
 import { useState } from "react";
 import { toast } from "sonner";
 import { User, MapPin, Mail, Phone, Shield } from "lucide-react";
+import { SocialTrustScore } from "@/components/SocialTrustScore";
 import { Redirect } from "wouter";
 
 export default function Profile() {
@@ -29,6 +30,11 @@ export default function Profile() {
   const { data: stats } = trpc.user.getStats.useQuery(undefined, {
     enabled: isAuthenticated,
   });
+
+  const { data: trustData } = trpc.trust.getTrustProfile.useQuery(
+    { userId: user?.id || 0 },
+    { enabled: !!user?.id }
+  );
 
   const updateProfileMutation = trpc.user.updateProfile.useMutation({
     onSuccess: () => {
@@ -101,9 +107,22 @@ export default function Profile() {
           </div>
         </div>
 
-        {/* Statistics Cards */}
-        {stats && (
-          <div className="grid md:grid-cols-4 gap-4 mb-8">
+        {/* Trust Score & Statistics */}
+        <div className="grid md:grid-cols-3 gap-6 mb-8">
+          <div className="md:col-span-1">
+            {trustData && (
+              <SocialTrustScore 
+                score={parseFloat(trustData.score.currentScore as string)}
+                stats={{
+                  successfulTransactions: trustData.score.successfulTransactionsCount || 0,
+                  totalTransactions: trustData.score.totalTransactionsCount || 0,
+                  kycLevel: user?.verificationLevel || 0
+                }}
+                badges={trustData.badges as any}
+              />
+            )}
+          </div>
+          <div className="md:col-span-2 grid grid-cols-2 gap-4">
             <Card className="p-6">
               <p className="text-sm text-muted-foreground mb-2">الرصيد الحالي</p>
               <p className="text-2xl font-bold text-primary">{stats.balance} ل.د</p>
@@ -124,7 +143,7 @@ export default function Profile() {
               </div>
             </Card>
           </div>
-        )}
+        </div>
 
         {/* Profile Form */}
         <Card className="p-8">

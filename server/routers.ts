@@ -40,6 +40,7 @@ import { paymentAdminRouter } from "./routers/payment-admin";
 import { walletIdEnhancedRouter } from "./routers/wallet_id_enhanced";
 import { diaasRouter } from "./routers/diaas";
 import { smartEscrowRouter } from "./routers/smartEscrow";
+import { trustRouter } from "./routers/trust";
 
 const COMMISSIONS: Record<string, number> = {
   phone_credit: 0.30,
@@ -59,6 +60,7 @@ export const appRouter = router({
   paymentAdmin: paymentAdminRouter,
   walletId: walletIdEnhancedRouter,
   smartEscrow: smartEscrowRouter,
+  trust: trustRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {

@@ -722,3 +722,4 @@ export type InsertIdentityVerification = typeof identityVerifications.$inferInse
  * Export DIaaS schema tables
  */
 export * from "./schema_diaas";
+export * from "./schema_trust_system";
