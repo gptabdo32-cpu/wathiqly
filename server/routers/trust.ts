@@ -5,12 +5,19 @@ import {
   updateTrustScore, 
   getUserTrustData 
 } from "../trust_logic";
+import { 
+  updatePredictiveTrustScore,
+  generateAiPredictiveInsight,
+  recordUserMetric
+} from "../predictive_trust_logic";
 import { getDb } from "../db";
 import { 
   trustScoreHistory, 
   userBadges, 
   reviews, 
-  escrows 
+  escrows,
+  predictiveTrustProfiles,
+  userActivityMetrics
 } from "../../drizzle/schema";
 import { eq, and, desc } from "drizzle-orm";
 
@@ -29,11 +36,50 @@ export const trustRouter = router({
             message: "User trust data not found",
           });
         }
+
+        const db = await getDb();
+        if (db) {
+          const [predictiveProfile] = await db.select().from(predictiveTrustProfiles).where(eq(predictiveTrustProfiles.userId, input.userId)).limit(1);
+          return {
+            ...trustData,
+            predictiveProfile: predictiveProfile || null
+          };
+        }
+
         return trustData;
       } catch (error) {
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to fetch trust profile",
+        });
+      }
+    }),
+
+  /**
+   * Request an AI-powered predictive trust update (Manual or triggered)
+   */
+  refreshPredictiveScore: protectedProcedure
+    .input(z.object({ userId: z.number().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const targetUserId = input.userId || ctx.user.id;
+      
+      // Only admins can refresh others' scores
+      if (input.userId && input.userId !== ctx.user.id && ctx.user.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only admins can refresh other users' scores" });
+      }
+
+      try {
+        // 1. First get standard score
+        const historicalScore = await updateTrustScore(targetUserId, "predictive_refresh_trigger");
+        
+        // 2. Then apply AI predictive layer
+        const finalScore = await updatePredictiveTrustScore(targetUserId, historicalScore);
+        
+        return { success: true, newScore: finalScore };
+      } catch (error) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to refresh predictive score",
         });
       }
     }),
@@ -131,10 +177,14 @@ export const trustRouter = router({
           });
 
           // Trigger trust score update for the reviewee
-          await updateTrustScore(revieweeId, "new_review_received", { id: input.escrowId, type: "escrow" });
+          const historicalScore = await updateTrustScore(revieweeId, "new_review_received", { id: input.escrowId, type: "escrow" });
+          
+          // Apply predictive layer
+          await updatePredictiveTrustScore(revieweeId, historicalScore);
           
           // Also update for the reviewer (participation bonus)
-          await updateTrustScore(ctx.user.id, "review_submitted", { id: input.escrowId, type: "escrow" });
+          const reviewerHistoricalScore = await updateTrustScore(ctx.user.id, "review_submitted", { id: input.escrowId, type: "escrow" });
+          await updatePredictiveTrustScore(ctx.user.id, reviewerHistoricalScore);
         });
 
         return { success: true };
@@ -159,5 +209,23 @@ export const trustRouter = router({
         .select()
         .from(userBadges)
         .where(and(eq(userBadges.userId, input.userId), eq(userBadges.isActive, true)));
+    }),
+
+  /**
+   * Log a user activity metric (Internal use or client-side behavioral tracking)
+   */
+  logActivityMetric: protectedProcedure
+    .input(z.object({
+      type: z.enum(["response_time", "login_frequency", "transaction_speed", "dispute_rate", "profile_completeness"]),
+      value: z.number(),
+      metadata: z.any().optional()
+    }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        await recordUserMetric(ctx.user.id, input.type, input.value, input.metadata);
+        return { success: true };
+      } catch (error) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to log metric" });
+      }
     }),
 });
