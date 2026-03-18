@@ -96,6 +96,27 @@ export function createLivenessSession(config: LivenessSessionConfig) {
 }
 
 /**
+ * Validate video URL and check accessibility
+ */
+async function validateVideoUrl(videoUrl: string): Promise<void> {
+  try {
+    const response = await fetch(videoUrl, { method: "HEAD" });
+    if (!response.ok) {
+      throw new Error(`Video not accessible: ${response.status}`);
+    }
+    const contentType = response.headers.get("content-type");
+    if (!contentType || !contentType.includes("video")) {
+      throw new Error("Invalid content type: not a video");
+    }
+  } catch (error) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: `Video validation failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+    });
+  }
+}
+
+/**
  * Analyze video for liveness detection using LLM Vision API
  * @param videoUrl URL to the uploaded video
  * @param challenges Expected challenges to detect
@@ -113,6 +134,9 @@ export async function analyzeVideoForLiveness(
         message: "Invalid video URL",
       });
     }
+
+    // Validate video accessibility and format
+    await validateVideoUrl(videoUrl);
 
     // Build challenge descriptions
     const challengeDescriptions = challenges.map((c) => {

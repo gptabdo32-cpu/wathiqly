@@ -524,32 +524,42 @@ export const LivenessDetectionEnhanced: React.FC<LivenessDetectionProps> = ({
           const formData = new FormData();
           formData.append("file", blob, `liveness-${sessionId}.webm`);
 
-          // Use manus-upload-file utility
-          const uploadCommand = `manus-upload-file /tmp/liveness-${sessionId}.webm`;
-
-          // For now, we'll use a simpler approach with fetch
+          // Upload video via API endpoint
           const uploadResponse = await fetch("/api/upload", {
             method: "POST",
             body: formData,
+            headers: {
+              "x-trpc-source": "client",
+            },
           });
 
           if (!uploadResponse.ok) {
-            throw new Error("Upload failed");
+            const errorData = await uploadResponse.json();
+            throw new Error(errorData.message || "Upload failed");
           }
 
-          const { url } = await uploadResponse.json();
+          const uploadData = await uploadResponse.json();
+          const videoUrl = uploadData.url;
+
+          if (!videoUrl) {
+            throw new Error("No URL returned from upload");
+          }
 
           // Submit for analysis
           const result = await submitVideoMutation.mutateAsync({
             sessionId,
-            videoUrl: url,
+            videoUrl,
             videoDuration: (60 - timeRemaining) * 1000,
           });
 
           onComplete(result);
         } catch (error) {
           console.error("Upload error:", error);
-          onError("فشل في رفع الفيديو. يرجى المحاولة مرة أخرى.");
+          onError(
+            error instanceof Error
+              ? `فشل في رفع الفيديو: ${error.message}`
+              : "فشل في رفع الفيديو. يرجى المحاولة مرة أخرى."
+          );
         }
       }, 500);
     }

@@ -127,9 +127,19 @@ export const livenessRouter = router({
           completedAt: new Date(),
         });
 
+        // Log error for debugging
+        console.error("[Liveness] Video analysis failed:", error);
+
+        // Return more specific error message
+        if (error instanceof TRPCError) {
+          throw error;
+        }
+
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
-          message: "Failed to analyze video for liveness detection",
+          message: error instanceof Error
+            ? `Failed to analyze video: ${error.message}`
+            : "Failed to analyze video for liveness detection",
         });
       }
 
