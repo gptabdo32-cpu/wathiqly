@@ -19,11 +19,11 @@ import {
 } from "../db_liveness";
 import {
   createLivenessSession as generateSession,
-  analyzeVideoForLiveness,
   calculateComprehensiveRiskScore,
   validateLivenessResult,
   ChallengeType,
 } from "../_core/livenessDetection";
+import { analyzeVideoForLivenessEnhanced } from "../_core/livenessDetectionEnhanced";
 
 export const livenessRouter = router({
   /**
@@ -118,7 +118,7 @@ export const livenessRouter = router({
       let analysisResult;
 
       try {
-        analysisResult = await analyzeVideoForLiveness(videoUrl, challenges);
+        analysisResult = await analyzeVideoForLivenessEnhanced(videoUrl, challenges);
         analysisResult.sessionId = sessionId;
       } catch (error) {
         // Mark session as failed

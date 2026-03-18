@@ -9,9 +9,23 @@ import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { AlertCircle, CheckCircle2, Loader2, Video, Camera } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, Video, Camera, Lightbulb } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import {
+  analyzeLightingQuality,
+  monitorLightingQuality,
+  getQualityColor,
+  getQualityLabel,
+  type LightingAnalysis,
+} from "./LightingQualityDetector";
+import {
+  estimateCompressionResult,
+  estimateUploadTime,
+  formatFileSize,
+  getQualityRecommendation,
+  type CompressionOptions,
+} from "./VideoCompressionUtils";
 
 interface Challenge {
   type: string;
@@ -80,6 +94,11 @@ export const LivenessDetectionEnhanced: React.FC<LivenessDetectionProps> = ({
     faceDetected: false,
     faceDetectionCount: 0,
   });
+  const [lightingAnalysis, setLightingAnalysis] = useState<LightingAnalysis | null>(null);
+  const [isLightingAdequate, setIsLightingAdequate] = useState(false);
+  const [estimatedFileSize, setEstimatedFileSize] = useState<number | null>(null);
+  const [compressionQuality, setCompressionQuality] = useState<"low" | "medium" | "high">("medium");
+  const lightingMonitorRef = useRef<(() => void) | null>(null);
 
   const submitVideoMutation = trpc.liveness.submitVideo.useMutation();
 
@@ -136,6 +155,27 @@ export const LivenessDetectionEnhanced: React.FC<LivenessDetectionProps> = ({
     [challenges]
   );
 
+  // Monitor lighting quality
+  const startLightingMonitoring = useCallback((stream: MediaStream) => {
+    if (!videoRef.current || !canvasRef.current) return;
+
+    // Stop previous monitoring if exists
+    if (lightingMonitorRef.current) {
+      lightingMonitorRef.current();
+    }
+
+    // Start monitoring lighting
+    lightingMonitorRef.current = monitorLightingQuality(
+      videoRef.current,
+      canvasRef.current,
+      (analysis) => {
+        setLightingAnalysis(analysis);
+        setIsLightingAdequate(analysis.isAdequate);
+      },
+      500 // Check every 500ms
+    );
+  }, []);
+
   // Start camera and recording
   const startDetection = useCallback(async () => {
     try {
@@ -151,16 +191,26 @@ export const LivenessDetectionEnhanced: React.FC<LivenessDetectionProps> = ({
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
 
-        // Setup MediaRecorder with better codec support
+        // Start lighting monitoring
+        startLightingMonitoring(stream);
+
+        // Setup MediaRecorder with better codec support and compression
         const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
           ? "video/webm;codecs=vp9"
           : MediaRecorder.isTypeSupported("video/webm;codecs=vp8")
           ? "video/webm;codecs=vp8"
           : "video/webm";
 
+        // Adjust bitrate based on compression quality
+        const bitrateMap = {
+          low: 800000, // 800 kbps
+          medium: 1500000, // 1.5 Mbps
+          high: 2500000, // 2.5 Mbps
+        };
+
         const mediaRecorder = new MediaRecorder(stream, {
           mimeType,
-          videoBitsPerSecond: 2500000, // 2.5 Mbps
+          videoBitsPerSecond: bitrateMap[compressionQuality],
         });
 
         mediaRecorder.ondataavailable = (event) => {
@@ -513,6 +563,11 @@ export const LivenessDetectionEnhanced: React.FC<LivenessDetectionProps> = ({
         stream.getTracks().forEach((track) => track.stop());
       }
 
+      // Stop lighting monitoring
+      if (lightingMonitorRef.current) {
+        lightingMonitorRef.current();
+      }
+
       // Create blob and upload
       setTimeout(async () => {
         const blob = new Blob(recordedChunksRef.current, {
@@ -544,6 +599,13 @@ export const LivenessDetectionEnhanced: React.FC<LivenessDetectionProps> = ({
           if (!videoUrl) {
             throw new Error("No URL returned from upload");
           }
+
+          // Show compression stats
+          const uploadedSize = blob.size;
+          const estimatedTime = estimateUploadTime(uploadedSize);
+          toast.info(
+            `تم رفع الفيديو بنجاح (${formatFileSize(uploadedSize)} - ${estimatedTime}s)`
+          );
 
           // Submit for analysis
           const result = await submitVideoMutation.mutateAsync({
@@ -593,6 +655,72 @@ export const LivenessDetectionEnhanced: React.FC<LivenessDetectionProps> = ({
 
   return (
     <div className="w-full max-w-2xl mx-auto space-y-6">
+      {/* Lighting Quality Card */}
+      {!isRecording && (
+        <Card className="p-6 border-2" style={{ borderColor: lightingAnalysis ? getQualityColor(lightingAnalysis.quality) : "#e5e7eb" }}>
+          <div className="flex items-start gap-4">
+            <Lightbulb
+              className="w-6 h-6 flex-shrink-0 mt-1"
+              style={{ color: lightingAnalysis ? getQualityColor(lightingAnalysis.quality) : "#6b7280" }}
+            />
+            <div className="flex-1">
+              <h3 className="font-semibold text-gray-900 mb-2">جودة الإضاءة</h3>
+              {lightingAnalysis ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">السطوع:</span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-blue-500 transition-all"
+                          style={{ width: `${lightingAnalysis.brightness}%` }}
+                        />
+                      </div>
+                      <span className="text-sm font-medium text-gray-900 w-10 text-right">
+                        {lightingAnalysis.brightness}%
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">التباين:</span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-green-500 transition-all"
+                          style={{ width: `${lightingAnalysis.contrast}%` }}
+                        />
+                      </div>
+                      <span className="text-sm font-medium text-gray-900 w-10 text-right">
+                        {lightingAnalysis.contrast}%
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between mt-3">
+                    <span className="text-sm text-gray-600">الجودة:</span>
+                    <span
+                      className="text-sm font-semibold px-3 py-1 rounded-full text-white"
+                      style={{ backgroundColor: getQualityColor(lightingAnalysis.quality) }}
+                    >
+                      {getQualityLabel(lightingAnalysis.quality)}
+                    </span>
+                  </div>
+                  <div className="mt-3 space-y-1">
+                    {lightingAnalysis.recommendations.map((rec, idx) => (
+                      <p key={idx} className="text-xs text-gray-600 flex items-start gap-2">
+                        <span className="text-blue-500 mt-1">•</span>
+                        <span>{rec}</span>
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-600">جاري تحليل الإضاءة...</p>
+              )}
+            </div>
+          </div>
+        </Card>
+      )}
+
       <Card className="p-6">
         <h2 className="text-2xl font-bold mb-4">كشف الحيوية التفاعلي</h2>
 
@@ -681,13 +809,45 @@ export const LivenessDetectionEnhanced: React.FC<LivenessDetectionProps> = ({
           ))}
         </div>
 
+        {/* Compression Quality Selection */}
+        {!isRecording && (
+          <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <label className="block text-sm font-medium text-gray-900 mb-3">
+              جودة الضغط (للاتصالات البطيئة)
+            </label>
+            <div className="flex gap-2">
+              {(["low", "medium", "high"] as const).map((quality) => (
+                <button
+                  key={quality}
+                  onClick={() => setCompressionQuality(quality)}
+                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                    compressionQuality === quality
+                      ? "bg-blue-500 text-white"
+                      : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+                  }`}
+                >
+                  {quality === "low" ? "منخفضة" : quality === "medium" ? "متوسطة" : "عالية"}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-600 mt-2">
+              {compressionQuality === "low"
+                ? "حجم أصغر، جودة أقل (مناسب للاتصالات الضعيفة)"
+                : compressionQuality === "medium"
+                ? "توازن بين الحجم والجودة (موصى به)"
+                : "حجم أكبر، جودة أعلى (مناسب للاتصالات السريعة)"}
+            </p>
+          </div>
+        )}
+
         {/* Controls */}
         <div className="flex gap-4">
           <Button
             onClick={startDetection}
-            disabled={isRecording}
+            disabled={isRecording || !isLightingAdequate}
             className="flex-1"
             variant="default"
+            title={!isLightingAdequate ? "الإضاءة غير كافية" : ""}
           >
             <Camera className="w-4 h-4 mr-2" />
             ابدأ الكشف
