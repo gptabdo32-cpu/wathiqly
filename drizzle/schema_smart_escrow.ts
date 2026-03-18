@@ -39,6 +39,8 @@ export const iotDevices = mysqlTable("iotDevices", {
   escrowId: int("escrowId").notNull(),
   deviceId: varchar("deviceId", { length: 100 }).notNull(), // Unique hardware ID
   deviceType: mysqlEnum("deviceType", ["gps_tracker", "temp_sensor", "humidity_sensor", "impact_sensor", "smart_lock"]).notNull(),
+  secureToken: varchar("secureToken", { length: 255 }).unique().notNull(), // Unique token for device authentication
+  encryptedData: json("encryptedData"), // Encrypted sensitive readings (e.g., GPS, temperature)
   
   // Thresholds for automatic release or dispute
   config: json("config"), // { minTemp: 0, maxTemp: 25, targetLocation: { lat: 0, lng: 0 }, radius: 100 }
@@ -74,3 +76,17 @@ export type InsertIotDevice = typeof iotDevices.$inferInsert;
 
 export type BlockchainLog = typeof blockchainLogs.$inferSelect;
 export type InsertBlockchainLog = typeof blockchainLogs.$inferInsert;
+
+/**
+ * Milestone Signatures - For non-repudiation of milestone completion
+ */
+export const milestoneSignatures = mysqlTable("milestoneSignatures", {
+  id: int("id").autoincrement().primaryKey(),
+  milestoneId: int("milestoneId").notNull(),
+  userId: int("userId").notNull(), // User who signed (buyer or seller)
+  signature: text("signature").notNull(), // Digital signature of milestone completion
+  signedAt: timestamp("signedAt").defaultNow().notNull(),
+});
+
+export type MilestoneSignature = typeof milestoneSignatures.$inferSelect;
+export type InsertMilestoneSignature = typeof milestoneSignatures.$inferInsert;

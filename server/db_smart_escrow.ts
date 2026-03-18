@@ -7,6 +7,8 @@ import {
   InsertIotDevice,
   blockchainLogs,
   InsertBlockchainLog,
+  milestoneSignatures,
+  InsertMilestoneSignature,
 } from "../drizzle/schema_smart_escrow";
 import { escrows } from "../drizzle/schema";
 
@@ -80,11 +82,11 @@ export async function updateMilestoneStatus(
 /**
  * Register an IoT device for an escrow
  */
-export async function registerIotDevice(device: InsertIotDevice) {
+export async function registerIotDevice(device: InsertIotDevice): Promise<any> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  const result = await db.insert(iotDevices).values(device);
+  const [result] = await db.insert(iotDevices).values(device);
   return result;
 }
 
@@ -107,13 +109,15 @@ export async function getEscrowIotDevices(escrowId: number) {
 export async function updateIotReading(
   deviceId: string,
   reading: any,
-  status?: "active" | "inactive" | "triggered" | "tampered"
+  status?: "active" | "inactive" | "triggered" | "tampered",
+  encryptedData?: any
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
   const updateData: any = { lastReading: reading };
   if (status) updateData.status = status;
+  if (encryptedData) updateData.encryptedData = encryptedData;
 
   await db
     .update(iotDevices)
@@ -132,7 +136,7 @@ export async function logBlockchainTx(log: InsertBlockchainLog) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  const result = await db.insert(blockchainLogs).values(log);
+  const [result] = await db.insert(blockchainLogs).values(log);
   return result;
 }
 
@@ -148,4 +152,31 @@ export async function getEscrowBlockchainLogs(escrowId: number) {
     .from(blockchainLogs)
     .where(eq(blockchainLogs.escrowId, escrowId))
     .orderBy(desc(blockchainLogs.createdAt));
+
+// ============ MILESTONE SIGNATURES OPERATIONS ============
+
+/**
+ * Add a digital signature for a milestone
+ */
+export async function addMilestoneSignature(signature: InsertMilestoneSignature) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [result] = await db.insert(milestoneSignatures).values(signature);
+  return result;
+}
+
+/**
+ * Get signatures for a specific milestone
+ */
+export async function getMilestoneSignatures(milestoneId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(milestoneSignatures)
+    .where(eq(milestoneSignatures.milestoneId, milestoneId))
+    .orderBy(milestoneSignatures.signedAt);
+}
 }

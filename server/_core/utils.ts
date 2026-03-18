@@ -21,3 +21,7 @@ export async function sendSMS(phoneNumber: string, message: string): Promise<voi
   // Simulate API call delay
   await new Promise(resolve => setTimeout(resolve, 1000));
 }
+
+export function generateSecureToken(): string {
+  return crypto.randomBytes(32).toString("hex");
+}

@@ -10,8 +10,12 @@ import {
   updateIotReading,
   logBlockchainTx,
   getEscrowBlockchainLogs,
+  addMilestoneSignature,
+  getMilestoneSignatures,
 } from "../db_smart_escrow";
 import { getEscrowById, updateEscrowStatus } from "../db";
+import { encryptData, decryptData } from "../_core/encryption"; // Import encryption utilities
+import { generateSecureToken } from "../_core/utils"; // Assuming a utility to generate tokens
 import { createAuditLog } from "../db-enhanced";
 
 export const smartEscrowRouter = router({
@@ -31,6 +35,7 @@ export const smartEscrowRouter = router({
             amount: z.string(),
             verificationType: z.enum(["manual", "github_commit", "github_pr", "url_check", "external_api"]).default("manual"),
             verificationData: z.any().optional(),
+            requiresSignature: z.boolean().default(false), // New field for digital signature requirement
           })
         ),
       })
@@ -75,10 +80,11 @@ export const smartEscrowRouter = router({
         milestoneId: z.number(),
         status: z.enum(["pending", "in_progress", "completed", "released", "disputed"]),
         verificationData: z.any().optional(),
+        signature: z.string().optional(), // Optional signature when updating to 'completed' or 'released'
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // In a real app, we'd check permissions here
+      // In a real app, we'd check permissions here and verify signature if required
       await updateMilestoneStatus(input.milestoneId, input.status, input.verificationData);
       
       await createAuditLog({
@@ -107,8 +113,10 @@ export const smartEscrowRouter = router({
       const escrow = await getEscrowById(input.escrowId);
       if (!escrow) throw new TRPCError({ code: "NOT_FOUND", message: "Escrow not found" });
 
+      const secureToken = generateSecureToken(); // Generate a secure token
       await registerIotDevice({
         ...input,
+        secureToken,
         status: "active",
       });
 
@@ -120,7 +128,8 @@ export const smartEscrowRouter = router({
         newValue: { deviceId: input.deviceId, type: input.deviceType },
       });
 
-      return { success: true };
+      // Return the secureToken to the device for future authentication
+      return { success: true, secureToken };
     }),
 
   /**
@@ -130,12 +139,21 @@ export const smartEscrowRouter = router({
     .input(
       z.object({
         deviceId: z.string(),
+        secureToken: z.string(), // Require secureToken for authentication
         reading: z.any(),
         status: z.enum(["active", "inactive", "triggered", "tampered"]).optional(),
       })
     )
     .mutation(async ({ input }) => {
-      await updateIotReading(input.deviceId, input.reading, input.status);
+      // Authenticate device using secureToken
+      const devices = await getEscrowIotDevices(0); // Fetch all devices for now, will refine later
+      const device = devices.find(d => d.deviceId === input.deviceId && d.secureToken === input.secureToken);
+      if (!device) throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid device or token" });
+
+      // Encrypt sensitive readings before storing
+      const encryptedReading = encryptData(JSON.stringify(input.reading));
+
+      await updateIotReading(input.deviceId, input.reading, input.status, encryptedReading);
       
       // Logic for automatic escrow release based on IoT data would go here
       // e.g., if deviceType is gps_tracker and reading is within target radius
@@ -173,5 +191,42 @@ export const smartEscrowRouter = router({
     .mutation(async ({ input }) => {
       await logBlockchainTx(input);
       return { success: true };
+    }),
+
+  // ============ MILESTONE SIGNATURES ============
+
+  /**
+   * Add a digital signature to a milestone
+   */
+  signMilestone: protectedProcedure
+    .input(
+      z.object({
+        milestoneId: z.number(),
+        signature: z.string(), // Digital signature from the user
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // In a real app, we'd verify the signature against the user's public key
+      await addMilestoneSignature({
+        milestoneId: input.milestoneId,
+        userId: ctx.user.id,
+        signature: input.signature,
+      });
+
+      await createAuditLog({
+        userId: ctx.user.id,
+        action: "milestone_signed",
+        entityType: "milestone",
+        entityId: input.milestoneId,
+        newValue: { signature: input.signature },
+      });
+
+      return { success: true };
+    }),
+
+  getMilestoneSignatures: protectedProcedure
+    .input(z.object({ milestoneId: z.number() }))
+    .query(async ({ input }) => {
+      return await getMilestoneSignatures(input.milestoneId);
     }),
 });
