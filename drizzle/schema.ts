@@ -163,3 +163,12 @@ export const usersWithLiveness = mysqlTable("users_liveness", {
 
 export type UserLiveness = typeof usersWithLiveness.$inferSelect;
 export type InsertUserLiveness = typeof usersWithLiveness.$inferInsert;
+// Export from other schema files
+export * from "./schema_ai_arbitrator";
+export * from "./schema_behavioral_biometrics";
+export * from "./schema_diaas";
+export * from "./schema_mediator";
+export * from "./schema_new_features";
+export * from "./schema_smart_escrow";
+export * from "./schema_trust_system";
+export * from "./schema_wallet_id";

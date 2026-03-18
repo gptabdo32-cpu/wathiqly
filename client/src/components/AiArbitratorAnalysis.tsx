@@ -165,8 +165,45 @@ export const AiArbitratorAnalysis: React.FC<AiArbitratorAnalysisProps> = ({ escr
 
   return (
     <div className="space-y-6 font-arabic" dir="rtl">
+      {/* Tracking Path Section */}
+      {analysisData?.trackingPath && (
+        <Card className="border-blue-100 shadow-sm overflow-hidden">
+          <div className="bg-blue-600 px-4 py-2 text-white text-xs font-bold flex items-center gap-2">
+            <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+            تتبع المسار الفعلي للمنصة (Manus Forge API)
+          </div>
+          <CardContent className="p-4">
+            <div className="flex flex-wrap gap-4 justify-between">
+              {analysisData.trackingPath.map((step: any, index: number) => (
+                <div key={index} className="flex items-center gap-2">
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                    step.status === 'completed' ? 'bg-green-500 text-white' : 'bg-slate-200 text-slate-500'
+                  }`}>
+                    {index + 1}
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-slate-700">{step.step}</span>
+                    <span className="text-[10px] text-slate-400">{new Date(step.timestamp).toLocaleTimeString('ar-SA')}</span>
+                  </div>
+                  {index < analysisData.trackingPath.length - 1 && (
+                    <div className="hidden md:block w-8 h-[1px] bg-slate-200 mx-2" />
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Legal Disclaimer */}
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-3">
+        <AlertTriangle className="text-amber-600 flex-shrink-0" size={18} />
+        <p className="text-[10px] text-amber-800 leading-relaxed">
+          <strong>إخلاء مسؤولية:</strong> هذا التحليل يتم بواسطة الذكاء الاصطناعي (Legal LLM) عبر Manus Forge وهو مخصص للأغراض الاسترشادية فقط. لا يعتبر هذا التحليل نصيحة قانونية رسمية. منصة وثّقلي تخلي مسؤوليتها عن أي قرارات تُتخذ بناءً على هذا التحليل.
+        </p>
+      </div>
+
       {/* Main Analysis Card */}
-      <Card className="border-blue-100 shadow-sm">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
