@@ -1,7 +1,7 @@
 /**
  * Video Compression Utilities
  * Handles video compression and optimization before upload
- * Reduces bandwidth usage while maintaining quality for liveness detection
+ * Reduces bandwidth usage while maintaining quality for video processing
  */
 
 export interface CompressionOptions {
