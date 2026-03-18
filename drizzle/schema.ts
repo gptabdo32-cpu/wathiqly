@@ -28,5 +28,5 @@ export type InsertUser = typeof users.$inferInsert;
 // Export from other schema files
 export * from "./schema_new_features";
 export * from "./schema_smart_escrow";
-export * from "./schema_trust_system";
+
 export * from "./schema_wallet_id";
