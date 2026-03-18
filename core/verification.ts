@@ -1,14 +1,14 @@
 import { z } from "zod";
-import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
+import { protectedProcedure, publicProcedure, router } from "../core/trpc";
 import { TRPCError } from "@trpc/server";
 import { users } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
-import { generateOTP, sendSMS } from "../_core/utils";
+import { generateOTP, sendSMS } from "../core/utils";
 import {
   notifyPhoneVerificationSuccess,
   notifyPhoneVerificationFailed,
   notifyVerificationStatusUpdate,
-} from "../_core/verificationNotifications";
+} from "../core/notifications/verificationNotifications";
 
 export const verificationRouter = router({
   sendOtp: publicProcedure

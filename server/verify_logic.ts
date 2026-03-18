@@ -7,7 +7,7 @@ import {
   analyzeVideoForLivenessEnhanced,
   clearAnalysisCache,
   getCacheStats,
-} from "./_core/livenessDetectionEnhanced.ts";
+} from "./core/livenessDetectionEnhanced.ts";
 
 async function runTests() {
   console.log("🚀 Starting logic verification...");

@@ -37,7 +37,7 @@ import {
   chatAttachments,
   InsertChatAttachment,
 } from "../drizzle/schema";
-import { ENV } from "./_core/env";
+import { ENV } from "./core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 

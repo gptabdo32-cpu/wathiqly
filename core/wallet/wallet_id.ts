@@ -1,12 +1,12 @@
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { protectedProcedure, router } from "../core/trpc";
 import { TRPCError } from "@trpc/server";
 import { users, wallets, transactions } from "../../drizzle/schema";
 import { p2pTransfers, billPayments, ssoClients, ssoAuthorizations, walletAuditLogs } from "../../drizzle/schema_wallet_id";
 import { eq, and, or } from "drizzle-orm";
 import { Decimal } from "decimal.js";
-import { generateOTP, sendSMS } from "../_core/utils";
-import { encryptData } from "../_core/encryption";
+import { generateOTP, sendSMS } from "../core/utils";
+import { encryptData } from "../core/encryption";
 import { createAuditLog } from "../db-enhanced";
 
 /**

@@ -14,7 +14,7 @@ import {
   inspectionAgents,
   InsertInspectionAgent,
 } from "../drizzle/schema_new_features";
-import { ENV } from "./_core/env";
+import { ENV } from "./core/env";
 import { v4 as uuidv4 } from "uuid";
 
 let _db: ReturnType<typeof drizzle> | null = null;

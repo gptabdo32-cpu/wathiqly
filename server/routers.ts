@@ -1,8 +1,8 @@
 import { COOKIE_NAME } from "@shared/const";
 import { createAuditLog } from "./db-enhanced";
-import { getSessionCookieOptions } from "./_core/cookies";
-import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router, protectedProcedure } from "./_core/trpc";
+import { getSessionCookieOptions } from "./core/cookies";
+import { systemRouter } from "./core/systemRouter";
+import { publicProcedure, router, protectedProcedure } from "./core/trpc";
 import { z } from "zod";
 
 import {
@@ -31,16 +31,16 @@ import {
   getWalletByUserId,
   updateUserProfile,
 } from "./db";
-import { adminRouter } from "./routers/admin";
+import { adminRouter } from "./core/admin";
 import { depositRequests, withdrawalRequests, transactions, wallets } from "./db";
-import { verificationRouter } from "./routers/verification";
+import { verificationRouter } from "./core/verification";
 import { getDb } from "./db";
-import { encryptData } from "./_core/encryption";
+import { encryptData } from "./core/encryption";
 import { Decimal } from "decimal.js";
-import { paymentAdminRouter } from "./routers/payment-admin";
-import { walletIdEnhancedRouter } from "./routers/wallet_id_enhanced";
-import { smartEscrowRouter } from "./routers/smartEscrow";
-import { trustRouter } from "./routers/trust";
+import { paymentAdminRouter } from "./core/payment-admin";
+import { walletIdEnhancedRouter } from "./core/wallet/wallet_id_enhanced";
+import { smartEscrowRouter } from "./core/escrow/smartEscrow";
+import { trustRouter } from "./core/trust";
 
 const COMMISSIONS: Record<string, number> = {
   phone_credit: 0.30,

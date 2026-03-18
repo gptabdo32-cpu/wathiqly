@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { router, protectedProcedure, publicProcedure } from "../_core/trpc";
+import { router, protectedProcedure, publicProcedure } from "../core/trpc";
 import { TRPCError } from "@trpc/server";
 import {
   createMilestones,
@@ -14,10 +14,10 @@ import {
   getMilestoneSignatures,
 } from "../db_smart_escrow";
 import { getEscrowById, updateEscrowStatus } from "../db";
-import { encryptData, decryptData } from "../_core/encryption"; // Import encryption utilities
-import { generateSecureToken } from "../_core/utils"; // Assuming a utility to generate tokens
+import { encryptData, decryptData } from "../core/encryption"; // Import encryption utilities
+import { generateSecureToken } from "../core/utils"; // Assuming a utility to generate tokens
 import { createAuditLog } from "../db-enhanced";
-import { invokeLLM } from "../_core/llm";
+import { invokeLLM } from "../core/llm";
 import { createAiArbitratorAnalysis, getLatestAiArbitratorAnalysis } from "../db_ai_arbitrator";
 
 export const smartEscrowRouter = router({

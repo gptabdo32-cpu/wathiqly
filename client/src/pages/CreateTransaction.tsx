@@ -1,4 +1,4 @@
-import { useAuth } from '@/_core/hooks/useAuth';
+import { useAuth } from '@/core/hooks/useAuth';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import { Redirect, useLocation } from 'wouter';

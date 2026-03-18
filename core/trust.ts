@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { router, protectedProcedure, publicProcedure } from "../_core/trpc";
+import { router, protectedProcedure, publicProcedure } from "../core/trpc";
 import { TRPCError } from "@trpc/server";
 import { 
   updateTrustScore, 

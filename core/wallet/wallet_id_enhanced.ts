@@ -1,11 +1,11 @@
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { protectedProcedure, router } from "../core/trpc";
 import { TRPCError } from "@trpc/server";
 import { users, wallets, transactions } from "../../drizzle/schema";
 import { p2pTransfers, billPayments, ssoClients, ssoAuthorizations, walletAuditLogs } from "../../drizzle/schema_wallet_id";
 import { eq, and, desc, gt } from "drizzle-orm";
 import { Decimal } from "decimal.js";
-import { encryptData } from "../_core/encryption";
+import { encryptData } from "../core/encryption";
 import { createAuditLog } from "../db-enhanced";
 import crypto from "crypto";
 import {
@@ -14,7 +14,7 @@ import {
   idempotencyManager,
   createFinancialValidator,
   createAuditTrailLogger,
-} from "../_core/security_middleware";
+} from "../core/security_middleware";
 
 /**
  * Enhanced Wathiqly ID & Pay Wallet Router

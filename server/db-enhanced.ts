@@ -9,7 +9,7 @@ import {
   disputeEvidence,
   notifications,
 } from "../drizzle/schema";
-import { encryptData, decryptData } from "./_core/encryption";
+import { encryptData, decryptData } from "./core/encryption";
 import { Decimal } from "decimal.js";
 import { TRPCError } from "@trpc/server";
 

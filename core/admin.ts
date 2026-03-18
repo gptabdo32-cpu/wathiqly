@@ -1,4 +1,4 @@
-import { router, protectedProcedure, adminProcedure } from "../_core/trpc";
+import { router, protectedProcedure, adminProcedure } from "../core/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { createAdminLog, getAdminStats } from "../db";

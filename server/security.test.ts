@@ -5,13 +5,13 @@ import {
   idempotencyManager,
   createFinancialValidator,
   createAuditTrailLogger,
-} from "./_core/security_middleware";
+} from "./core/security_middleware";
 import {
   createTokenGenerator,
   createPKCEManager,
   createSessionManager,
   createConsentManager,
-} from "./_core/oauth_enhanced";
+} from "./core/auth/oauth_enhanced";
 import { Decimal } from "decimal.js";
 import { TRPCError } from "@trpc/server";
 

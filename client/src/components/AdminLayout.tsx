@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import AdminSidebar from "./AdminSidebar";
-import { useAuth } from "@/_core/hooks/useAuth";
+import { useAuth } from "@/core/hooks/useAuth";
 import { Redirect } from "wouter";
 
 interface AdminLayoutProps {

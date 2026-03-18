@@ -2,8 +2,8 @@ import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import type { Express, Request, Response } from "express";
 import * as db from "../db";
 import { FraudDetector } from "../fraud_ai_logic";
-import { getSessionCookieOptions } from "./cookies";
-import { sdk } from "./sdk";
+import { getSessionCookieOptions } from "../cookies";
+import { sdk } from "../sdk";
 
 function getQueryParam(req: Request, key: string): string | undefined {
   const value = req.query[key];

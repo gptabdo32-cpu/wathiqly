@@ -6,7 +6,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
-import { serveStatic, setupVite } from "./vite";
+import { serveStatic, setupVite } from "./vite";\nimport { initializeSubscribers } from "./events/Subscribers";
 import { limiter, authLimiter } from "./middleware";
 import multer from "multer";
 import { storagePut } from "../storage";
@@ -31,7 +31,7 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
   throw new Error(`No available port found starting from ${startPort}`);
 }
 
-async function startServer() {
+async function startServer() {\n  // Initialize Smart Event Bus System\n  initializeSubscribers();\n
   const app = express();
   const server = createServer(app);
 

@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import { ENV } from "./env.js";
+import { ENV } from "../env.js";
 
 /**
  * Blockchain Integration Module

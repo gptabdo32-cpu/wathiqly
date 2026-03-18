@@ -2,7 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import { apiClients } from "../../drizzle/schema_diaas";
 import { getDb } from "../db";
-import { hashData } from "./encryption";
+import { hashData } from "../encryption";
 
 /**
  * Authenticate a DIaaS Business Client using Client ID and Client Secret
