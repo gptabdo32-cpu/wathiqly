@@ -21,6 +21,7 @@ import IdentityVerification from './pages/IdentityVerification';
 import AdvancedPayment from './pages/AdvancedPayment';
 import WalletID from './pages/WalletID';
 import BusinessDashboard from './pages/BusinessDashboard';
+import LivenessVerification from './pages/LivenessVerification';
 
 function Router() {
   return (
@@ -36,6 +37,7 @@ function Router() {
       <Route path={'/faq'} component={FAQ} />
       <Route path={'/messaging'} component={Messaging} />
       <Route path={'/verify'} component={IdentityVerification} />
+      <Route path={'/liveness'} component={LivenessVerification} />
            <Route path={"/"} component={Home} />
       <Route path={"/wallet"} component={WalletManagement} />
       <Route path={"/payment"} component={AdvancedPayment} />

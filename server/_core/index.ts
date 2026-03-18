@@ -8,6 +8,9 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { limiter, authLimiter } from "./middleware";
+import multer from "multer";
+import { storagePut } from "../storage";
+import { nanoid } from "nanoid";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -70,6 +73,56 @@ async function startServer() {
       }
     }
     next();
+  });
+
+  // Configure multer for file uploads
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+      fileSize: 100 * 1024 * 1024, // 100MB
+    },
+    fileFilter: (req, file, cb) => {
+      const allowedMimes = ["video/webm", "video/mp4", "video/quicktime", "video/x-msvideo"];
+      if (allowedMimes.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error(`Invalid file type: ${file.mimetype}`));
+      }
+    },
+  });
+
+  // Upload endpoint for liveness detection videos
+  app.post("/api/upload", upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No file provided" });
+      }
+
+      // Generate unique filename
+      const fileId = nanoid();
+      const ext = req.file.originalname.split(".").pop() || "webm";
+      const filename = `liveness/${Date.now()}-${fileId}.${ext}`;
+
+      // Upload to storage
+      const uploadResult = await storagePut(
+        filename,
+        req.file.buffer,
+        req.file.mimetype
+      );
+
+      res.json({
+        success: true,
+        url: uploadResult.url,
+        key: uploadResult.key,
+        fileId,
+      });
+    } catch (error) {
+      console.error("Upload error:", error);
+      res.status(500).json({
+        error: "Failed to upload file",
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
   });
 
   // OAuth callback under /api/oauth/callback

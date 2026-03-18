@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { AlertCircle, CheckCircle2, Loader2, AlertTriangle } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import LivenessDetection from "@/components/LivenessDetection";
+import LivenessDetectionEnhanced from "@/components/LivenessDetectionEnhanced";
+import LivenessResultsDisplay from "@/components/LivenessResultsDisplay";
 
 interface VerificationStep {
   id: string;
@@ -118,6 +119,7 @@ export default function LivenessVerificationPage() {
           )
         );
         toast.error("فشل التحقق من الحيوية");
+        setCurrentStep("complete");
       }
     }, 2000);
   };
@@ -241,7 +243,7 @@ export default function LivenessVerificationPage() {
           )}
 
           {currentStep === "liveness" && sessionId && (
-            <LivenessDetection
+            <LivenessDetectionEnhanced
               sessionId={sessionId}
               challenges={challenges}
               onComplete={handleLivenessComplete}
@@ -266,71 +268,26 @@ export default function LivenessVerificationPage() {
           )}
 
           {currentStep === "complete" && verificationResult && (
-            <div className="text-center space-y-6">
-              {verificationResult.success ? (
-                <>
-                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
-                    <CheckCircle2 className="w-8 h-8 text-green-600" />
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-bold text-green-900 mb-2">
-                      تم التحقق بنجاح!
-                    </h2>
-                    <p className="text-gray-600 mb-4">
-                      تم التحقق من هويتك بنجاح. يمكنك الآن الوصول إلى جميع الميزات.
-                    </p>
-                  </div>
+            <>
+              <LivenessResultsDisplay
+                livenessScore={verificationResult.livenessScore}
+                riskScore={verificationResult.riskScore}
+                challenges={verificationResult.challenges}
+                presentationAttackDetected={verificationResult.presentationAttackDetected}
+                presentationAttackType={verificationResult.presentationAttackType}
+                warnings={verificationResult.warnings}
+                success={verificationResult.success}
+              />
 
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-left space-y-2">
-                    <h3 className="font-semibold text-green-900 mb-2">
-                      نتائج التحليل:
-                    </h3>
-                    <ul className="text-sm text-green-800 space-y-1">
-                      <li>
-                        • درجة الحيوية: {verificationResult.livenessScore}/100
-                      </li>
-                      <li>
-                        • درجة المخاطرة: {verificationResult.riskScore}/100
-                      </li>
-                      <li>
-                        • التحديات المكتملة:{" "}
-                        {verificationResult.challenges.filter((c: any) => c.detected).length}/
-                        {verificationResult.challenges.length}
-                      </li>
-                    </ul>
-                  </div>
-
-                  <Button onClick={() => window.location.href = "/"} size="lg" className="w-full">
-                    العودة إلى الرئيسية
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto">
-                    <AlertCircle className="w-8 h-8 text-red-600" />
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-bold text-red-900 mb-2">
-                      فشل التحقق
-                    </h2>
-                    <p className="text-gray-600 mb-4">
-                      {verificationResult.message}
-                    </p>
-                  </div>
-
-                  {verificationResult.warnings && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-left">
-                      <h3 className="font-semibold text-red-900 mb-2">
-                        الأسباب:
-                      </h3>
-                      <ul className="text-sm text-red-800 space-y-1">
-                        {verificationResult.warnings.map((w: string, i: number) => (
-                          <li key={i}>• {w}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
+              <div className="mt-6 flex gap-4">
+                <Button
+                  onClick={() => (window.location.href = "/")}
+                  size="lg"
+                  className="flex-1"
+                >
+                  العودة إلى الرئيسية
+                </Button>
+                {!verificationResult.success && (
                   <Button
                     onClick={() => {
                       setCurrentStep("start");
@@ -339,13 +296,14 @@ export default function LivenessVerificationPage() {
                       setVerificationResult(null);
                     }}
                     size="lg"
-                    className="w-full"
+                    variant="outline"
+                    className="flex-1"
                   >
                     حاول مرة أخرى
                   </Button>
-                </>
-              )}
-            </div>
+                )}
+              </div>
+            </>
           )}
         </div>
 
