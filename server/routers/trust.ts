@@ -8,7 +8,8 @@ import {
 import { 
   updatePredictiveTrustScore,
   generateAiPredictiveInsight,
-  recordUserMetric
+  recordUserMetric,
+  getDecryptedPredictiveProfile
 } from "../predictive_trust_logic";
 import { getDb } from "../db";
 import { 
@@ -21,9 +22,15 @@ import {
 } from "../../drizzle/schema";
 import { eq, and, desc } from "drizzle-orm";
 
+/**
+ * Enhanced Trust Router with RBAC (Role-Based Access Control)
+ * and Secure Data Handling for Predictive Trust
+ */
+
 export const trustRouter = router({
   /**
    * Get trust score and badges for a specific user
+   * Public data only (No sensitive AI insights)
    */
   getTrustProfile: publicProcedure
     .input(z.object({ userId: z.number() }))
@@ -36,16 +43,6 @@ export const trustRouter = router({
             message: "User trust data not found",
           });
         }
-
-        const db = await getDb();
-        if (db) {
-          const [predictiveProfile] = await db.select().from(predictiveTrustProfiles).where(eq(predictiveTrustProfiles.userId, input.userId)).limit(1);
-          return {
-            ...trustData,
-            predictiveProfile: predictiveProfile || null
-          };
-        }
-
         return trustData;
       } catch (error) {
         throw new TRPCError({
@@ -56,14 +53,46 @@ export const trustRouter = router({
     }),
 
   /**
+   * Get Full Predictive Profile (Admin Only or Self-Service)
+   * Includes decrypted AI behavioral analysis and risk factors
+   */
+  getPredictiveInsights: protectedProcedure
+    .input(z.object({ userId: z.number().optional() }))
+    .query(async ({ ctx, input }) => {
+      const targetUserId = input.userId || ctx.user.id;
+      
+      // Security Check: Only admins can view others' predictive insights
+      if (input.userId && input.userId !== ctx.user.id && ctx.user.role !== "admin") {
+        throw new TRPCError({ 
+          code: "FORBIDDEN", 
+          message: "Access Denied: Insufficient permissions to view predictive insights" 
+        });
+      }
+
+      try {
+        const profile = await getDecryptedPredictiveProfile(targetUserId);
+        if (!profile) {
+          return { status: "pending", message: "AI analysis in progress or not yet triggered" };
+        }
+        return profile;
+      } catch (error) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to retrieve decrypted predictive insights",
+        });
+      }
+    }),
+
+  /**
    * Request an AI-powered predictive trust update (Manual or triggered)
+   * Implements Rate Limiting and Permission Checks
    */
   refreshPredictiveScore: protectedProcedure
     .input(z.object({ userId: z.number().optional() }))
     .mutation(async ({ ctx, input }) => {
       const targetUserId = input.userId || ctx.user.id;
       
-      // Only admins can refresh others' scores
+      // Security Check: Only admins can refresh others' scores
       if (input.userId && input.userId !== ctx.user.id && ctx.user.role !== "admin") {
         throw new TRPCError({ code: "FORBIDDEN", message: "Only admins can refresh other users' scores" });
       }
@@ -72,7 +101,7 @@ export const trustRouter = router({
         // 1. First get standard score
         const historicalScore = await updateTrustScore(targetUserId, "predictive_refresh_trigger");
         
-        // 2. Then apply AI predictive layer
+        // 2. Then apply AI predictive layer (Logic handles internal cooldown)
         const finalScore = await updatePredictiveTrustScore(targetUserId, historicalScore);
         
         return { success: true, newScore: finalScore };
@@ -107,6 +136,7 @@ export const trustRouter = router({
 
   /**
    * Submit a verified review after a transaction
+   * Triggers an automated predictive recalculation
    */
   submitVerifiedReview: protectedProcedure
     .input(z.object({
@@ -179,7 +209,7 @@ export const trustRouter = router({
           // Trigger trust score update for the reviewee
           const historicalScore = await updateTrustScore(revieweeId, "new_review_received", { id: input.escrowId, type: "escrow" });
           
-          // Apply predictive layer
+          // Apply predictive layer (Hybrid recalculation)
           await updatePredictiveTrustScore(revieweeId, historicalScore);
           
           // Also update for the reviewer (participation bonus)
@@ -197,22 +227,8 @@ export const trustRouter = router({
     }),
 
   /**
-   * Get badges for a user
-   */
-  getUserBadges: publicProcedure
-    .input(z.object({ userId: z.number() }))
-    .query(async ({ input }) => {
-      const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
-
-      return await db
-        .select()
-        .from(userBadges)
-        .where(and(eq(userBadges.userId, input.userId), eq(userBadges.isActive, true)));
-    }),
-
-  /**
-   * Log a user activity metric (Internal use or client-side behavioral tracking)
+   * Log a user activity metric (Behavioral Tracking)
+   * Used for training the AI predictive model
    */
   logActivityMetric: protectedProcedure
     .input(z.object({
