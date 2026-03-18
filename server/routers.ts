@@ -44,6 +44,7 @@ import { diaasRouter } from "./routers/diaas";
 import { smartEscrowRouter } from "./routers/smartEscrow";
 import { trustRouter } from "./routers/trust";
 import { livenessRouter } from "./routers/liveness";
+import { behavioralRouter } from "./routers/behavioral";
 
 const COMMISSIONS: Record<string, number> = {
   phone_credit: 0.30,
@@ -64,6 +65,7 @@ export const appRouter = router({
   smartEscrow: smartEscrowRouter,
   trust: trustRouter,
   liveness: livenessRouter,
+  behavioral: behavioralRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
@@ -901,6 +903,7 @@ export const appRouter = router({
 
   // ============ LIVENESS DETECTION OPERATIONS ============
   liveness: livenessRouter,
+  behavioral: behavioralRouter,
 });
 
 export type AppRouter = typeof appRouter;

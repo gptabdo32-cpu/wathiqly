@@ -5,6 +5,7 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
+import { BehavioralBiometricsProvider } from "./components/BehavioralBiometricsProvider";
 
 import Dashboard from './pages/Dashboard';
 import Profile from './pages/Profile';
@@ -56,7 +57,9 @@ function App() {
       <ThemeProvider defaultTheme="light">
         <TooltipProvider>
           <Toaster />
-          <Router />
+          <BehavioralBiometricsProvider>
+            <Router />
+          </BehavioralBiometricsProvider>
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

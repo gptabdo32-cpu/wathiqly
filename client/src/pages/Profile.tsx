@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
 import { toast } from "sonner";
-import { User, MapPin, Mail, Phone, Shield } from "lucide-react";
+import { User, MapPin, Mail, Phone, Shield, Fingerprint } from "lucide-react";
 import { SocialTrustScore } from "@/components/SocialTrustScore";
 import { Redirect } from "wouter";
 
@@ -306,9 +306,7 @@ export default function Profile() {
                 </p>
               </div>
               {!user?.isPhoneVerified && <Button size="sm">تحقق الآن</Button>}
-            </div>
-
-            <div className="flex items-center justify-between p-4 bg-card border border-border rounded-lg">
+                <div className="flex items-center justify-between p-4 bg-card border border-border rounded-lg">
               <div>
                 <p className="font-medium text-foreground">التحقق من الهوية</p>
                 <p className="text-sm text-muted-foreground">
@@ -317,7 +315,25 @@ export default function Profile() {
               </div>
               {!user?.isIdentityVerified && <Button size="sm">تحقق الآن</Button>}
             </div>
-          </div>
+
+            <div className="flex items-center justify-between p-4 bg-card border border-border rounded-lg">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-full">
+                  <Fingerprint className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-medium text-foreground">التحقق السلوكي (Behavioral Biometrics)</p>
+                  <p className="text-sm text-muted-foreground">
+                    طبقة أمان إضافية تحلل نمط استخدامك للتطبيق
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  نشط
+                </span>
+              </div>
+            </div>>
         </Card>
       </div>
     </div>
