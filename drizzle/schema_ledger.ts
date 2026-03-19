@@ -1,4 +1,4 @@
-import { int, mysqlTable, text, timestamp, decimal, varchar, uniqueIndex } from "drizzle-orm/mysql-core";
+import { int, mysqlTable, text, timestamp, decimal, varchar, uniqueIndex, check, sql } from "drizzle-orm/mysql-core";
 import { idempotencyKeys } from "./schema_idempotency"; // Import idempotencyKeys schema
 import { users } from "./schema";
 import { escrowContracts } from "./schema_escrow_engine";
@@ -30,17 +30,17 @@ export const ledgerTransactions = mysqlTable("ledger_transactions", {
   description: text("description"),
   referenceType: varchar("referenceType", { length: 50 }), // e.g., "escrow", "payout", "deposit", "fee", "refund", "system"
   referenceId: int("referenceId"), // ID of the related business entity. IMPROVEMENT: Consider adding specific foreign keys for each referenceType where applicable for stronger data integrity.
+  isSystemTransaction: int("isSystemTransaction").default(0).notNull(), // Flag for system-initiated transactions (e.g., fees, refunds not directly tied to an escrow)
   
   // IMPROVEMENT: Real Foreign Key for Escrow link
   escrowContractId: int("escrowContractId").references(() => escrowContracts.id),
   
   idempotencyKey: varchar("idempotencyKey", { length: 255 }), // Unique key to prevent double processing
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-}, (table) => {
-  return {
-    idempotencyKeyIdx: uniqueIndex("idempotency_key_idx").on(table.idempotencyKey),
-  };
-});
+}, (table) => ({
+  idempotencyKeyIdx: uniqueIndex("idempotency_key_idx").on(table.idempotencyKey),
+  escrowOrSystemCheck: check("escrow_or_system_check", sql`${table.escrowContractId} IS NOT NULL OR ${table.isSystemTransaction} = 1`),
+}));
 
 /**
  * Ledger Entries Table (The Heart of the Ledger)

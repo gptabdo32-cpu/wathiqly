@@ -61,6 +61,7 @@ export class LedgerService {
     referenceType?: string;
     referenceId?: number;
     escrowContractId?: number;
+    isSystemTransaction?: boolean; // New field to indicate system-initiated transactions
     idempotencyKey?: string; // IMPROVEMENT: This should be a composite key, e.g., hash(userId + actionType + payload) to ensure global uniqueness and context-awareness.
     entries: {
       accountId: number;
@@ -114,6 +115,7 @@ export class LedgerService {
         referenceType: params.referenceType,
         referenceId: params.referenceId,
         escrowContractId: params.escrowContractId,
+        isSystemTransaction: params.isSystemTransaction ? 1 : 0,
         idempotencyKey: params.idempotencyKey,
       });
 
@@ -192,9 +194,11 @@ export class LedgerService {
   /**
    * Helper to transfer funds between two user wallets via Ledger.
    */
-  static async transferFunds(fromAccountId: number, toAccountId: number, amount: string, description: string) {
+  static async transferFunds(fromAccountId: number, toAccountId: number, amount: string, description: string, escrowContractId?: number) {
     return await this.recordTransaction({
       description,
+      escrowContractId,
+      isSystemTransaction: escrowContractId === undefined, // Mark as system transaction if not part of an escrow
       entries: [
         { accountId: fromAccountId, debit: "0.0000", credit: amount }, // Credit the source (Liability/Wallet decrease)
         { accountId: toAccountId, debit: amount, credit: "0.0000" },   // Debit the destination (Wallet increase)
