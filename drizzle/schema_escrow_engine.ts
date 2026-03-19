@@ -29,6 +29,31 @@ export const escrowContracts = mysqlTable("escrow_contracts", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
+// IMPROVEMENT: For stricter database-level state transition enforcement, consider adding MySQL TRIGGERS.
+// This ensures that status transitions are valid at the database level, preventing invalid states
+// even if application-level checks are bypassed or have bugs.
+// Example (conceptual, actual implementation would be in a migration file):
+/*
+DELIMITER //
+CREATE TRIGGER enforce_escrow_status_transitions
+BEFORE UPDATE ON escrow_contracts
+FOR EACH ROW
+BEGIN
+    IF NEW.status <> OLD.status THEN
+        -- Define valid transitions here. This is a simplified example.
+        IF OLD.status = 'pending' AND NEW.status NOT IN ('locked', 'cancelled') THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid escrow status transition from pending.';
+        END IF;
+        IF OLD.status = 'locked' AND NEW.status NOT IN ('released', 'disputed', 'cancelled') THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid escrow status transition from locked.';
+        END IF;
+        -- Add more transition rules for other states as defined in EscrowEngine.VALID_TRANSITIONS
+    END IF;
+END;
+//
+DELIMITER ;
+*/
+
 /**
  * Disputes Table
  * Manages conflicts related to escrow contracts.
