@@ -200,9 +200,18 @@ export class EscrowEngine {
 
       // 4. Blockchain Sync if applicable
       if (contract.blockchainStatus === "synced" && contract.onChainId !== null) {
-        // Here we would call blockchainService.releaseMilestone or similar
-        // For simplicity, we assume a single-milestone escrow or full release
-        console.log(`[EscrowEngine] Should release on-chain Escrow #${contract.onChainId}`);
+        try {
+          // Assuming a single milestone or full release for simplicity
+          // In a real scenario, this would involve specific milestone IDs
+          const txHash = await blockchainService.releaseMilestone(contract.onChainId, 0); // Assuming milestone 0 for full release
+          await tx.update(escrowContracts)
+            .set({ lastTxHash: txHash })
+            .where(eq(escrowContracts.id, escrowId));
+          console.log(`[EscrowEngine] On-chain Escrow #${contract.onChainId} released. Tx: ${txHash}`);
+        } catch (error) {
+          console.error(`[EscrowEngine] Failed to release on-chain Escrow #${contract.onChainId}:`, error);
+          // Potentially update blockchainStatus to 'failed' or trigger a retry mechanism
+        }
       }
 
       return true;
@@ -327,6 +336,21 @@ export class EscrowEngine {
           { accountId: targetAccountId, debit: contract.amount, credit: "0.0000" },               // Fill Target Wallet
         ],
       });
+
+      // 4. Blockchain Sync for dispute resolution if applicable
+      if (contract.blockchainStatus === "synced" && contract.onChainId !== null) {
+        try {
+          const releaseToSeller = resolution === "seller_payout";
+          const txHash = await blockchainService.resolveDispute(contract.onChainId, 0, releaseToSeller); // Assuming milestone 0
+          await tx.update(disputes)
+            .set({ blockchainTxHash: txHash })
+            .where(eq(disputes.id, disputeId));
+          console.log(`[EscrowEngine] On-chain Dispute #${contract.onChainId} resolved. Tx: ${txHash}`);
+        } catch (error) {
+          console.error(`[EscrowEngine] Failed to resolve on-chain Dispute #${contract.onChainId}:`, error);
+          // Potentially update blockchainStatus to 'failed' or trigger a retry mechanism
+        }
+      }
 
       return true;
     });
