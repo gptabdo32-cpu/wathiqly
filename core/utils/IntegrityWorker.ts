@@ -29,7 +29,14 @@ export class IntegrityWorker {
           console.log("[IntegrityWorker] Ledger integrity check passed.");
         }
 
-        // TODO: Add more integrity checks here (e.g., escrow integrity, balance consistency for all accounts)
+        console.log("[IntegrityWorker] Running escrow-ledger consistency check...");
+        const escrowLedgerConsistency = await IntegrityCheckService.verifyEscrowLedgerConsistency();
+        if (!escrowLedgerConsistency.isValid) {
+          console.error("[IntegrityWorker] Escrow-Ledger consistency check failed! Inconsistencies:", escrowLedgerConsistency.inconsistencies);
+          // TODO: Implement alerting mechanism or automatic remediation
+        } else {
+          console.log("[IntegrityWorker] Escrow-Ledger consistency check passed.");
+        }
 
       } catch (error) {
         console.error("[IntegrityWorker] Error during integrity check:", error);

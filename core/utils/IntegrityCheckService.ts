@@ -1,6 +1,7 @@
 import { eq, sql, desc } from "drizzle-orm";
 import { getDb } from "../../server/db";
-import { ledgerAccounts, ledgerEntries } from "../../drizzle/schema_ledger";
+import { ledgerAccounts, ledgerEntries, ledgerTransactions } from "../../drizzle/schema_ledger";
+import { escrowContracts } from "../../drizzle/schema_escrow_engine";
 
 /**
  * IntegrityCheckService
@@ -35,6 +36,71 @@ export class IntegrityCheckService {
   /**
    * Snapshot Balance Check: Ensures account balance matches sum of its entries.
    */
+  static async verifyEscrowLedgerConsistency() {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+
+    const inconsistencies: any[] = [];
+
+    const allEscrowContracts = await db.select().from(escrowContracts);
+
+    for (const contract of allEscrowContracts) {
+      // Calculate the sum of all ledger entries related to this escrow contract
+      const [ledgerSum] = await db
+        .select({
+          totalDebit: sql`SUM(${ledgerEntries.debit})`,
+          totalCredit: sql`SUM(${ledgerEntries.credit})`,
+        })
+        .from(ledgerEntries)
+        .where(eq(ledgerEntries.escrowContractId, contract.id));
+
+      const currentEscrowBalanceInLedger = (parseFloat(ledgerSum.totalDebit as string) || 0) - (parseFloat(ledgerSum.totalCredit as string) || 0);
+
+      // Check 1: Does the ledger balance match the contract amount?
+      if (Math.abs(currentEscrowBalanceInLedger - parseFloat(contract.amount)) > 0.0001) {
+        inconsistencies.push({
+          type: "EscrowLedgerBalanceMismatch",
+          escrowId: contract.id,
+          contractAmount: contract.amount,
+          ledgerCalculatedBalance: currentEscrowBalanceInLedger.toFixed(4),
+          message: `Escrow contract amount (${contract.amount}) does not match ledger calculated balance (${currentEscrowBalanceInLedger.toFixed(4)})`,
+        });
+      }
+
+      // Check 2: Does the escrow status align with the ledger state?
+      // This is a simplified check. A more robust check would involve analyzing specific transaction types.
+      if (contract.status === "released" || contract.status === "refunded" || contract.status === "cancelled") {
+        // If escrow is in a terminal state, its ledger balance should ideally be zero.
+        if (Math.abs(currentEscrowBalanceInLedger) > 0.0001) {
+          inconsistencies.push({
+            type: "EscrowStatusLedgerMismatch",
+            escrowId: contract.id,
+            escrowStatus: contract.status,
+            ledgerCalculatedBalance: currentEscrowBalanceInLedger.toFixed(4),
+            message: `Escrow ${contract.status} but ledger still shows a balance of ${currentEscrowBalanceInLedger.toFixed(4)}`,
+          });
+        }
+      } else if (contract.status === "locked" || contract.status === "disputed") {
+        // If escrow is active, its ledger balance should match the contract amount.
+        if (Math.abs(currentEscrowBalanceInLedger - parseFloat(contract.amount)) > 0.0001) {
+          inconsistencies.push({
+            type: "EscrowStatusLedgerMismatch",
+            escrowId: contract.id,
+            escrowStatus: contract.status,
+            ledgerCalculatedBalance: currentEscrowBalanceInLedger.toFixed(4),
+            contractAmount: contract.amount,
+            message: `Escrow ${contract.status} but ledger balance (${currentEscrowBalanceInLedger.toFixed(4)}) does not match contract amount (${contract.amount})`,
+          });
+        }
+      }
+    }
+
+    return {
+      isValid: inconsistencies.length === 0,
+      inconsistencies,
+    };
+  }
+
   static async auditAccountBalance(accountId: number) {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
