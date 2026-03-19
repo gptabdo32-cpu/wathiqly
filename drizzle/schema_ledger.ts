@@ -28,8 +28,8 @@ export const ledgerAccounts = mysqlTable("ledger_accounts", {
 export const ledgerTransactions = mysqlTable("ledger_transactions", {
   id: int("id").autoincrement().primaryKey(),
   description: text("description"),
-  referenceType: varchar("referenceType", { length: 50 }), // e.g., "escrow", "payout", "deposit"
-  referenceId: int("referenceId"), // ID of the related business entity
+  referenceType: varchar("referenceType", { length: 50 }), // e.g., "escrow", "payout", "deposit", "fee", "refund", "system"
+  referenceId: int("referenceId"), // ID of the related business entity. IMPROVEMENT: Consider adding specific foreign keys for each referenceType where applicable for stronger data integrity.
   
   // IMPROVEMENT: Real Foreign Key for Escrow link
   escrowContractId: int("escrowContractId").references(() => escrowContracts.id),

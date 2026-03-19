@@ -1,4 +1,5 @@
 import { EscrowEngine } from "./EscrowEngine";
+import { DisputeOrchestrator } from "./DisputeOrchestrator";
 import { LedgerService } from "../ledger/LedgerService";
 import { eventBus } from "../events/EventBus";
 import { EventType } from "../events/EventTypes";
@@ -59,8 +60,8 @@ export class OrchestrationLayer {
   ) {
     console.log(`[Orchestrator] Resolving Dispute #${disputeId} with ${resolution}`);
     
-    // 1. Resolve via EscrowEngine
-    const success = await EscrowEngine.resolveDispute(disputeId, adminId, resolution);
+    // 1. Resolve via DisputeOrchestrator
+    const success = await DisputeOrchestrator.resolveDispute(disputeId, adminId, resolution);
     
     if (success) {
       // 2. Additional logic: Adjust Trust Scores, Notify Parties
