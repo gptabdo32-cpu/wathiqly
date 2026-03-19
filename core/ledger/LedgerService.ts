@@ -36,11 +36,13 @@ export class LedgerService {
   /**
    * Performs a double-entry transaction between two or more accounts.
    * Ensures that total Debits = total Credits.
+   * IMPROVEMENT: Supports idempotencyKey to prevent duplicate transactions.
    */
   static async recordTransaction(params: {
     description: string;
     referenceType?: string;
     referenceId?: number;
+    idempotencyKey?: string;
     entries: {
       accountId: number;
       debit: string;
@@ -49,6 +51,19 @@ export class LedgerService {
   }) {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
+
+    // Check for idempotency if key provided
+    if (params.idempotencyKey) {
+      const [existingTx] = await db
+        .select()
+        .from(ledgerTransactions)
+        .where(eq(ledgerTransactions.idempotencyKey, params.idempotencyKey))
+        .limit(1);
+      
+      if (existingTx) {
+        return existingTx.id; // Return existing transaction ID instead of re-processing
+      }
+    }
 
     // 1. Validate Double-Entry: Sum(Debits) must equal Sum(Credits)
     const totalDebit = params.entries.reduce((sum, e) => sum + parseFloat(e.debit), 0);
@@ -64,6 +79,7 @@ export class LedgerService {
         description: params.description,
         referenceType: params.referenceType,
         referenceId: params.referenceId,
+        idempotencyKey: params.idempotencyKey,
       });
 
       const txId = txHeader.insertId;

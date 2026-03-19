@@ -1,4 +1,4 @@
-import { int, mysqlTable, text, timestamp, decimal, varchar } from "drizzle-orm/mysql-core";
+import { int, mysqlTable, text, timestamp, decimal, varchar, uniqueIndex } from "drizzle-orm/mysql-core";
 import { users } from "./schema";
 
 /**
@@ -21,13 +21,19 @@ export const ledgerAccounts = mysqlTable("ledger_accounts", {
 /**
  * Ledger Transactions Table
  * Groups multiple entries into a single atomic financial event.
+ * IMPROVEMENT: Added idempotencyKey to prevent duplicate processing.
  */
 export const ledgerTransactions = mysqlTable("ledger_transactions", {
   id: int("id").autoincrement().primaryKey(),
   description: text("description"),
   referenceType: varchar("referenceType", { length: 50 }), // e.g., "escrow", "payout", "deposit"
   referenceId: int("referenceId"), // ID of the related business entity
+  idempotencyKey: varchar("idempotencyKey", { length: 255 }), // Unique key to prevent double processing
   createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => {
+  return {
+    idempotencyKeyIdx: uniqueIndex("idempotency_key_idx").on(table.idempotencyKey),
+  };
 });
 
 /**
