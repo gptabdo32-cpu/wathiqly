@@ -63,6 +63,9 @@ export class LedgerService {
     escrowContractId?: number;
     isSystemTransaction?: boolean; // New field to indicate system-initiated transactions
     idempotencyKey?: string; // IMPROVEMENT: This should be a composite key, e.g., hash(userId + actionType + payload) to ensure global uniqueness and context-awareness.
+    idempotencyActionType?: string; // e.g., "escrow_lock", "escrow_release"
+    idempotencyUserId?: number;
+    idempotencyPayloadHash?: string;
     entries: {
       accountId: number;
       debit: string;
@@ -74,28 +77,28 @@ export class LedgerService {
 
     // Check for idempotency if key provided using the dedicated idempotencyKeys table
     if (params.idempotencyKey) {
-      const [existingIdempotencyKey] = await db
+      const [existingIdempotencyRecord] = await db
         .select()
         .from(idempotencyKeys)
         .where(eq(idempotencyKeys.idempotencyKey, params.idempotencyKey))
         .limit(1);
       
-      if (existingIdempotencyKey) {
-        // If the key exists, it means the transaction was already processed or is in progress.
-        // We need to return the ID of the previously recorded transaction associated with this key.
-        // For now, we'll assume the idempotencyKey in ledgerTransactions is still the reference.
-        // A more robust solution would store the transactionId in the idempotencyKeys table.
-        const [existingTx] = await db
-          .select()
-          .from(ledgerTransactions)
-          .where(eq(ledgerTransactions.idempotencyKey, params.idempotencyKey))
-          .limit(1);
-        if (existingTx) {
-          return existingTx.id;
-        } else {
-          // This scenario indicates an inconsistency: idempotency key exists but no transaction.
-          // For now, we'll throw an error, but a retry mechanism or more complex handling might be needed.
-          throw new Error(`Idempotency key ${params.idempotencyKey} found, but no associated ledger transaction.`);
+      if (existingIdempotencyRecord) {
+        if (existingIdempotencyRecord.status === "completed") {
+          // If already completed, return the stored transactionId
+          if (existingIdempotencyRecord.transactionId) {
+            return existingIdempotencyRecord.transactionId;
+          } else {
+            // This should ideally not happen if status is \'completed\'
+            throw new Error(`Idempotency key ${params.idempotencyKey} completed but no transactionId found.`);
+          }
+        } else if (existingIdempotencyRecord.status === "pending") {
+          // If still pending, another process is handling it. Throw an error or implement a wait/retry mechanism.
+          throw new Error(`Idempotency key ${params.idempotencyKey} is currently being processed.`);
+        } else if (existingIdempotencyRecord.status === "failed") {
+          // If failed, we might want to retry or throw an error depending on the policy.
+          // For now, we\'ll throw an error, but a more sophisticated retry mechanism could be implemented.
+          throw new Error(`Idempotency key ${params.idempotencyKey} previously failed.`);
         }
       }
     }
@@ -119,12 +122,16 @@ export class LedgerService {
         idempotencyKey: params.idempotencyKey,
       });
 
-      // Record the idempotency key in the dedicated table
+      // Record the idempotency key in the dedicated table with pending status
       if (params.idempotencyKey) {
         await tx.insert(idempotencyKeys).values({
           idempotencyKey: params.idempotencyKey,
           transactionId: txId,
-          // expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // Example: key expires in 24 hours
+          status: "pending",
+          actionType: params.idempotencyActionType,
+          userId: params.idempotencyUserId,
+          payloadHash: params.idempotencyPayloadHash,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // Example: key expires in 24 hours
         });
       }
 
@@ -180,13 +187,28 @@ export class LedgerService {
       return txId;
     });
 
-    // 5. Publish Event: Transaction Recorded
-    await eventBus.publish(EventType.LEDGER_TRANSACTION_RECORDED, {
-      transactionId,
-      description: params.description,
-      referenceType: params.referenceType,
-      referenceId: params.referenceId,
-    });
+      // 5. Publish Event: Transaction Recorded
+      await eventBus.publish(EventType.LEDGER_TRANSACTION_RECORDED, {
+        transactionId,
+        description: params.description,
+        referenceType: params.referenceType,
+        referenceId: params.referenceId,
+      });
+    } catch (error) {
+      // If any error occurs during the transaction, mark the idempotency key as failed
+      if (params.idempotencyKey) {
+        await db.update(idempotencyKeys)
+          .set({ status: "failed", responseSnapshot: { error: (error as Error).message }, expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) })
+          .where(eq(idempotencyKeys.idempotencyKey, params.idempotencyKey));
+      }
+      throw error; // Re-throw the error after updating idempotency status
+
+    // Update idempotency key status to completed after successful transaction
+    if (params.idempotencyKey) {
+      await db.update(idempotencyKeys)
+        .set({ status: "completed", responseSnapshot: { transactionId }, expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) })
+        .where(eq(idempotencyKeys.idempotencyKey, params.idempotencyKey));
+    }
 
     return transactionId;
   }

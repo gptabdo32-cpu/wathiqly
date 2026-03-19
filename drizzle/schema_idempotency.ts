@@ -1,4 +1,4 @@
-import { int, mysqlTable, varchar, timestamp } from "drizzle-orm/mysql-core";
+import { int, mysqlTable, varchar, timestamp, json } from "drizzle-orm/mysql-core";
 
 /**
  * Idempotency Keys Table
@@ -10,6 +10,11 @@ export const idempotencyKeys = mysqlTable("idempotency_keys", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   expiresAt: timestamp("expiresAt"), // Optional: for keys that should expire after a certain time
   transactionId: int("transactionId").references(() => ledgerTransactions.id), // Link to the ledger transaction
+  status: varchar("status", { length: 50 }).default("pending").notNull(), // "pending", "completed", "failed"
+  responseSnapshot: json("responseSnapshot"), // Stores a snapshot of the response for successful operations
+  actionType: varchar("actionType", { length: 100 }), // e.g., "escrow_lock", "escrow_release", "dispute_resolve"
+  userId: int("userId"), // User initiating the action
+  payloadHash: varchar("payloadHash", { length: 255 }), // Hash of the relevant payload for composite key
 
   // You might want to add more fields like userId, actionType, etc., for auditing or debugging
   // userId: int("userId").references(() => users.id),
