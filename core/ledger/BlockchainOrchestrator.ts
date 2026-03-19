@@ -8,27 +8,15 @@ import { disputes } from "../../drizzle/schema_escrow_engine";
 /**
  * BlockchainOrchestrator
  * Responsible for processing outbox events related to blockchain synchronization.
+ * It performs the actual blockchain interaction and updates the escrow/dispute contracts.
+ * It does NOT update the outbox event status; that is handled by the OutboxWorker.
  */
 export class BlockchainOrchestrator {
-  static async processOutboxEvent(eventId: number) {
+  static async processOutboxEvent(event: typeof outboxEvents.$inferSelect): Promise<{ success: boolean; txHash?: string; error?: string }> {
     const db = await getDb();
-    if (!db) throw new Error("Database not available");
-
-    const [event] = await db.select().from(outboxEvents).where(eq(outboxEvents.id, eventId));
-
-    if (!event) {
-      console.warn(`[BlockchainOrchestrator] Outbox event ${eventId} not found.`);
-      return;
-    }
-
-    if (event.status !== "pending") {
-      console.log(`[BlockchainOrchestrator] Outbox event ${eventId} already processed or in progress.`);
-      return;
-    }
+    if (!db) return { success: false, error: "Database not available" };
 
     try {
-      await db.update(outboxEvents).set({ status: "processing" }).where(eq(outboxEvents.id, eventId));
-
       switch (event.eventType) {
         case "EscrowCreateRequested": {
           const payload = event.payload as { escrowId: number; sellerWalletAddress: string; amount: string; };
@@ -48,7 +36,7 @@ export class BlockchainOrchestrator {
             .where(eq(escrowContracts.id, payload.escrowId));
             
           console.log(`[BlockchainOrchestrator] Escrow #${payload.escrowId} synced to blockchain: ${txHash}`);
-          break;
+          return { success: true, txHash };
         }
         case "EscrowReleaseRequested": {
           const payload = event.payload as { escrowId: number; onChainId: number; milestoneId: number; };
@@ -57,7 +45,7 @@ export class BlockchainOrchestrator {
             .set({ lastTxHash: txHash })
             .where(eq(escrowContracts.id, payload.escrowId));
           console.log(`[BlockchainOrchestrator] On-chain Escrow #${payload.onChainId} released. Tx: ${txHash}`);
-          break;
+          return { success: true, txHash };
         }
         case "DisputeResolutionRequested": {
           const payload = event.payload as { disputeId: number; onChainId: number; milestoneId: number; releaseToSeller: boolean; };
@@ -66,17 +54,14 @@ export class BlockchainOrchestrator {
             .set({ blockchainTxHash: txHash })
             .where(eq(disputes.id, payload.disputeId));
           console.log(`[BlockchainOrchestrator] On-chain Dispute #${payload.onChainId} resolved. Tx: ${txHash}`);
-          break;
+          return { success: true, txHash };
         }
         default:
-          throw new Error(`Unknown event type: ${event.eventType}`);
+          return { success: false, error: `Unknown event type: ${event.eventType}` };
       }
-
-      await db.update(outboxEvents).set({ status: "completed", processedAt: new Date() }).where(eq(outboxEvents.id, eventId));
     } catch (error: any) {
-      console.error(`[BlockchainOrchestrator] Failed to process outbox event ${eventId}:`, error);
-      await db.update(outboxEvents).set({ status: "failed", error: error.message, processedAt: new Date() }).where(eq(outboxEvents.id, eventId));
-      throw error; // Re-throw to indicate failure
+      console.error(`[BlockchainOrchestrator] Error processing event ${event.id}:`, error);
+      return { success: false, error: error.message };
     }
   }
 }

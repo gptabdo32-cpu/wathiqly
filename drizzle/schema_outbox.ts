@@ -14,6 +14,8 @@ export const outboxEvents = mysqlTable("outbox_events", {
   status: varchar("status", { length: 50 }).default("pending").notNull(), // "pending", "processing", "completed", "failed"
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   processedAt: timestamp("processedAt"),
+  retries: int("retries").default(0).notNull(),
+  lastAttemptAt: timestamp("lastAttemptAt"),
   error: text("error"), // Stores error message if processing fails
 });
 
