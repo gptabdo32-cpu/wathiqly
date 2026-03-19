@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
 import { useParams, Link } from "wouter";
+import { sanitizeHtml } from "@/lib/security";
 import {
   Star,
   ShoppingCart,
@@ -21,6 +22,7 @@ import {
   Info,
 } from "lucide-react";
 import { SmartEscrowDetails } from "@/components/SmartEscrowDetails";
+import { Image } from "@/components/ui/image";
 
 export default function ProductDetail() {
   const { user, isAuthenticated } = useAuth();
@@ -72,10 +74,11 @@ export default function ProductDetail() {
           {/* 1️⃣ صور المنتج (Slider) */}
           <div className="lg:col-span-7 space-y-6">
             <div className="relative aspect-square rounded-[3rem] overflow-hidden bg-white shadow-xl shadow-slate-200 group">
-              <img 
+              <Image 
                 src={images[activeImage]} 
                 alt={product.title} 
                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
+                containerClassName="w-full h-full"
               />
               
               {images.length > 1 && (
@@ -116,7 +119,12 @@ export default function ProductDetail() {
                       activeImage === idx ? "border-orange-500 scale-95" : "border-transparent opacity-60 hover:opacity-100"
                     }`}
                   >
-                    <img src={img} className="w-full h-full object-cover" alt={`Thumbnail ${idx}`} />
+                    <Image 
+                      src={img} 
+                      className="w-full h-full object-cover" 
+                      alt={`Thumbnail ${idx}`} 
+                      containerClassName="w-full h-full"
+                    />
                   </button>
                 ))}
               </div>
@@ -125,9 +133,10 @@ export default function ProductDetail() {
             {/* 2️⃣ وصف كامل */}
             <Card className="p-8 border-none shadow-sm rounded-[2rem] bg-white space-y-6">
               <h3 className="text-2xl font-black text-slate-900">وصف المنتج</h3>
-              <p className="text-slate-600 leading-relaxed text-lg whitespace-pre-wrap">
-                {product.description || "لا يوجد وصف متاح لهذا المنتج حالياً."}
-              </p>
+              <p 
+                className="text-slate-600 leading-relaxed text-lg whitespace-pre-wrap"
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(product.description || "لا يوجد وصف متاح لهذا المنتج حالياً.") }}
+              />
               
               {/* 3️⃣ الخصائص الرئيسية (JSON) */}
               {Object.keys(specs).length > 0 && (

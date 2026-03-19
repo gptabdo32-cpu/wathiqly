@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { sanitizeObject } from '@/lib/security';
 import { Package, Laptop, UserCheck, ArrowRight, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Button } from './ui/button';
@@ -13,6 +14,22 @@ interface CreateDealFlowProps {
   onCancel: () => void;
 }
 
+/**
+ * CreateDealFlow Component
+ * 
+ * A multi-step form for creating different types of escrow transactions:
+ * 1. Physical Goods
+ * 2. Digital Accounts
+ * 3. Services
+ * 
+ * Features:
+ * - Step-by-step navigation
+ * - Type-specific form fields
+ * - Input sanitization before submission
+ * 
+ * @param onComplete - Callback function called when the form is successfully submitted
+ * @param onCancel - Callback function called when the user cancels the process
+ */
 export const CreateDealFlow: React.FC<CreateDealFlowProps> = ({ onComplete, onCancel }) => {
   const [step, setStep] = useState(1);
   const [dealType, setDealType] = useState<DealType | null>(null);
@@ -64,13 +81,16 @@ export const CreateDealFlow: React.FC<CreateDealFlowProps> = ({ onComplete, onCa
       specifications.hasMilestones = formData.hasMilestones;
     }
 
-    onComplete({
+    // Sanitize all form data before sending to server
+    const sanitizedData = sanitizeObject({
       title: formData.title,
       amount: formData.amount,
       sellerId: parseInt(formData.sellerId),
       dealType,
       specifications,
     });
+
+    onComplete(sanitizedData);
   };
 
   return (

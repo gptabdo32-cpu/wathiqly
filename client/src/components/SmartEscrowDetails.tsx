@@ -21,6 +21,20 @@ interface SmartEscrowDetailsProps {
   dealType: 'physical' | 'digital_account' | 'service';
 }
 
+/**
+ * SmartEscrowDetails Component
+ * 
+ * Displays the technical and blockchain details of a smart escrow transaction.
+ * 
+ * Features:
+ * - Milestone tracking for services
+ * - IoT device monitoring for physical goods
+ * - Blockchain log transparency
+ * - Real-time progress visualization
+ * 
+ * @param escrowId - The unique identifier of the escrow transaction
+ * @param dealType - The type of deal (physical, digital_account, or service)
+ */
 export const SmartEscrowDetails: React.FC<SmartEscrowDetailsProps> = ({ escrowId, dealType }) => {
   const { data: milestones, isLoading: loadingMilestones } = trpc.smartEscrow.getMilestones.useQuery({ escrowId });
   const { data: devices, isLoading: loadingDevices } = trpc.smartEscrow.getDevices.useQuery({ escrowId });
