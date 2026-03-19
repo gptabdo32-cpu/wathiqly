@@ -1,10 +1,37 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "../../server/db";
-import { escrowContracts } from "../../drizzle/schema_escrow_engine";
+import { escrowContracts, disputes } from "../../drizzle/schema_escrow_engine";
 import { LedgerService } from "../ledger/LedgerService";
-import { ledgerAccounts } from "../../drizzle/schema_ledger";\nimport { eventBus } from "../events/EventBus";\nimport { EventType } from "../events/EventTypes";
+import { ledgerAccounts } from "../../drizzle/schema_ledger";
+import { eventBus } from "../events/EventBus";
+import { EventType } from "../events/EventTypes";
+
+export type EscrowStatus = "pending" | "locked" | "released" | "disputed" | "refunded" | "cancelled";
 
 export class EscrowEngine {
+  /**
+   * Defines valid state transitions for Escrow Contracts.
+   * IMPROVEMENT: State Transition Layer to enforce business logic.
+   */
+  private static readonly VALID_TRANSITIONS: Record<EscrowStatus, EscrowStatus[]> = {
+    pending: ["locked", "cancelled"],
+    locked: ["released", "disputed", "cancelled"],
+    disputed: ["released", "refunded"],
+    released: [], // Terminal state
+    refunded: [], // Terminal state
+    cancelled: [], // Terminal state
+  };
+
+  /**
+   * Validates if a transition from currentStatus to nextStatus is allowed.
+   */
+  private static validateTransition(currentStatus: EscrowStatus, nextStatus: EscrowStatus) {
+    const allowed = this.VALID_TRANSITIONS[currentStatus];
+    if (!allowed || !allowed.includes(nextStatus)) {
+      throw new Error(`Invalid Escrow transition: ${currentStatus} -> ${nextStatus}`);
+    }
+  }
+
   /**
    * Locks funds for a new escrow contract.
    * Transfers amount from Buyer's wallet to a system-controlled Escrow Account.
@@ -26,6 +53,7 @@ export class EscrowEngine {
       .limit(1);
 
     if (!buyerAccount) throw new Error("Buyer Ledger Account not found");
+    
     const buyerBalance = await LedgerService.getAccountBalance(buyerAccount.id);
     if (buyerBalance < parseFloat(params.amount)) {
       throw new Error("Insufficient funds in Buyer wallet");
@@ -38,7 +66,7 @@ export class EscrowEngine {
       "liability" // System holds this on behalf of parties
     );
 
-    return await db.transaction(async (tx) => {
+    const escrowId = await db.transaction(async (tx) => {
       // 3. Record the Escrow Contract
       const [contract] = await tx.insert(escrowContracts).values({
         buyerId: params.buyerId,
@@ -50,20 +78,20 @@ export class EscrowEngine {
         description: params.description,
       });
 
-      const escrowId = contract.insertId;
+      const id = contract.insertId;
 
       // 4. Move funds from Buyer Wallet to Escrow Hold via Ledger
       await LedgerService.recordTransaction({
-        description: `Locking funds for Escrow #${escrowId}`,
+        description: `Locking funds for Escrow #${id}`,
         referenceType: "escrow",
-        referenceId: escrowId,
+        referenceId: id,
         entries: [
           { accountId: buyerAccount.id, debit: "0.0000", credit: params.amount }, // Decrease Buyer Liability
           { accountId: escrowAccountId, debit: params.amount, credit: "0.0000" }, // Increase System Escrow Asset/Liability
         ],
       });
 
-      return escrowId;
+      return id;
     });
 
     // 5. Publish Event: Funds Locked
@@ -91,9 +119,10 @@ export class EscrowEngine {
       .where(eq(escrowContracts.id, escrowId))
       .limit(1);
 
-    if (!contract || contract.status !== "locked") {
-      throw new Error("Contract not in a releasable state");
-    }
+    if (!contract) throw new Error("Contract not found");
+    
+    // ENFORCE STATE TRANSITION
+    this.validateTransition(contract.status as EscrowStatus, "released");
 
     // 1. Get Seller's Wallet Ledger Account
     const [sellerAccount] = await db
@@ -125,7 +154,6 @@ export class EscrowEngine {
       return true;
     });
   }
-}
 
   /**
    * Opens a dispute for an escrow contract.
@@ -141,11 +169,12 @@ export class EscrowEngine {
       .where(eq(escrowContracts.id, escrowId))
       .limit(1);
 
-    if (!contract || contract.status !== "locked") {
-      throw new Error("Cannot open dispute on this contract");
-    }
+    if (!contract) throw new Error("Contract not found");
+    
+    // ENFORCE STATE TRANSITION
+    this.validateTransition(contract.status as EscrowStatus, "disputed");
 
-    return await db.transaction(async (tx) => {
+    const disputeId = await db.transaction(async (tx) => {
       // 1. Update contract status to 'disputed'
       await tx
         .update(escrowContracts)
@@ -170,7 +199,7 @@ export class EscrowEngine {
       reason,
     });
 
-    return dispute.insertId;
+    return disputeId;
   }
 
   /**
@@ -199,6 +228,11 @@ export class EscrowEngine {
 
     if (!contract) throw new Error("Associated escrow contract not found");
 
+    const nextStatus = resolution === "buyer_refund" ? "refunded" : "released";
+    
+    // ENFORCE STATE TRANSITION
+    this.validateTransition(contract.status as EscrowStatus, nextStatus);
+
     return await db.transaction(async (tx) => {
       // 1. Update dispute status
       await tx
@@ -209,13 +243,22 @@ export class EscrowEngine {
       // 2. Update contract status
       await tx
         .update(escrowContracts)
-        .set({ status: resolution === "buyer_refund" ? "refunded" : "released" })
+        .set({ status: nextStatus })
         .where(eq(escrowContracts.id, contract.id));
 
       // 3. Redistribute funds via Ledger
-      const targetAccountId = resolution === "buyer_refund" 
-        ? contract.buyerLedgerAccountId 
-        : (await db.select().from(ledgerAccounts).where(eq(ledgerAccounts.userId, contract.sellerId)).limit(1))[0]?.id;
+      let targetAccountId: number | undefined;
+      
+      if (resolution === "buyer_refund") {
+        targetAccountId = contract.buyerLedgerAccountId;
+      } else {
+        const [sellerAccount] = await tx
+          .select()
+          .from(ledgerAccounts)
+          .where(eq(ledgerAccounts.userId, contract.sellerId))
+          .limit(1);
+        targetAccountId = sellerAccount?.id;
+      }
 
       if (!targetAccountId) throw new Error("Target Ledger Account for resolution not found");
 
