@@ -5,6 +5,7 @@ import { ledgerAccounts } from "./schema_ledger";
 /**
  * Escrow Contracts Table
  * Manages the state of locked funds between parties.
+ * IMPROVEMENT: Added blockchain sync fields to unify source of truth.
  */
 export const escrowContracts = mysqlTable("escrow_contracts", {
   id: int("id").autoincrement().primaryKey(),
@@ -17,6 +18,11 @@ export const escrowContracts = mysqlTable("escrow_contracts", {
   
   amount: decimal("amount", { precision: 20, scale: 4 }).notNull(),
   status: mysqlEnum("status", ["pending", "locked", "released", "disputed", "refunded", "cancelled"]).default("pending").notNull(),
+  
+  // Blockchain Synchronization
+  blockchainStatus: mysqlEnum("blockchainStatus", ["none", "pending", "synced", "failed"]).default("none").notNull(),
+  onChainId: int("onChainId"), // The ID of the escrow in the Smart Contract
+  lastTxHash: varchar("lastTxHash", { length: 255 }), // Hash of the last blockchain transaction
   
   description: text("description"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -35,6 +41,10 @@ export const disputes = mysqlTable("disputes", {
   status: mysqlEnum("status", ["open", "under_review", "resolved", "closed"]).default("open").notNull(),
   resolution: mysqlEnum("resolution", ["buyer_refund", "seller_payout", "split"]).nullable(),
   adminId: int("adminId").references(() => users.id), // Admin handling the dispute
+  
+  // Blockchain Synchronization for Dispute Resolution
+  blockchainTxHash: varchar("blockchainTxHash", { length: 255 }),
+  
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

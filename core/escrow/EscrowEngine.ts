@@ -5,6 +5,7 @@ import { LedgerService } from "../ledger/LedgerService";
 import { ledgerAccounts } from "../../drizzle/schema_ledger";
 import { eventBus } from "../events/EventBus";
 import { EventType } from "../events/EventTypes";
+import { blockchainService } from "../ledger/blockchain";
 
 export type EscrowStatus = "pending" | "locked" | "released" | "disputed" | "refunded" | "cancelled";
 
@@ -35,12 +36,14 @@ export class EscrowEngine {
   /**
    * Locks funds for a new escrow contract.
    * Transfers amount from Buyer's wallet to a system-controlled Escrow Account.
+   * IMPROVEMENT: Now also handles blockchain synchronization.
    */
   static async lockFunds(params: {
     buyerId: number;
     sellerId: number;
     amount: string;
     description: string;
+    sellerWalletAddress?: string; // Optional blockchain address
   }) {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
@@ -76,6 +79,7 @@ export class EscrowEngine {
         amount: params.amount,
         status: "locked",
         description: params.description,
+        blockchainStatus: params.sellerWalletAddress ? "pending" : "none",
       });
 
       const id = contract.insertId;
@@ -95,7 +99,14 @@ export class EscrowEngine {
       return id;
     });
 
-    // 5. Publish Event: Funds Locked
+    // 5. Blockchain Sync (Asynchronous / Background)
+    if (params.sellerWalletAddress) {
+      this.syncToBlockchain(escrowId, params.sellerWalletAddress, params.amount).catch(err => 
+        console.error(`[EscrowEngine] Blockchain sync failed for Escrow #${escrowId}:`, err)
+      );
+    }
+
+    // 6. Publish Event: Funds Locked
     await eventBus.publish(EventType.ESCROW_FUNDS_LOCKED, {
       escrowId,
       buyerId: params.buyerId,
@@ -104,6 +115,38 @@ export class EscrowEngine {
     });
 
     return escrowId;
+  }
+
+  /**
+   * Background task to sync escrow to blockchain.
+   */
+  private static async syncToBlockchain(escrowId: number, sellerAddress: string, amount: string) {
+    const db = await getDb();
+    if (!db) return;
+
+    try {
+      const amountInWei = blockchainService.toWei(amount);
+      const { txHash } = await blockchainService.createEscrow(
+        sellerAddress,
+        null, // mediator
+        `escrow_${escrowId}`,
+        amountInWei
+      );
+
+      await db.update(escrowContracts)
+        .set({ 
+          blockchainStatus: "synced", 
+          lastTxHash: txHash 
+        })
+        .where(eq(escrowContracts.id, escrowId));
+        
+      console.log(`[EscrowEngine] Escrow #${escrowId} synced to blockchain: ${txHash}`);
+    } catch (error) {
+      await db.update(escrowContracts)
+        .set({ blockchainStatus: "failed" })
+        .where(eq(escrowContracts.id, escrowId));
+      throw error;
+    }
   }
 
   /**
@@ -152,6 +195,13 @@ export class EscrowEngine {
           { accountId: sellerAccount.id, debit: contract.amount, credit: "0.0000" },               // Fill Seller Wallet
         ],
       });
+
+      // 4. Blockchain Sync if applicable
+      if (contract.blockchainStatus === "synced" && contract.onChainId !== null) {
+        // Here we would call blockchainService.releaseMilestone or similar
+        // For simplicity, we assume a single-milestone escrow or full release
+        console.log(`[EscrowEngine] Should release on-chain Escrow #${contract.onChainId}`);
+      }
 
       return true;
     });
