@@ -1,4 +1,5 @@
 import { int, mysqlTable, text, timestamp, decimal, varchar, uniqueIndex } from "drizzle-orm/mysql-core";
+import { idempotencyKeys } from "./schema_idempotency"; // Import idempotencyKeys schema
 import { users } from "./schema";
 import { escrowContracts } from "./schema_escrow_engine";
 

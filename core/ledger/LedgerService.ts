@@ -2,6 +2,7 @@ import { eq, sql, desc } from "drizzle-orm";
 import { accountBalancesCache } from "../../drizzle/schema_ledger";
 import { getDb } from "../../server/db";
 import { ledgerAccounts, ledgerTransactions, ledgerEntries } from "../../drizzle/schema_ledger";
+import { idempotencyKeys } from "../../drizzle/schema_idempotency";
 import { eventBus } from "../events/EventBus";
 import { EventType } from "../events/EventTypes";
 
@@ -60,7 +61,7 @@ export class LedgerService {
     referenceType?: string;
     referenceId?: number;
     escrowContractId?: number;
-    idempotencyKey?: string;
+    idempotencyKey?: string; // IMPROVEMENT: This should be a composite key, e.g., hash(userId + actionType + payload) to ensure global uniqueness and context-awareness.
     entries: {
       accountId: number;
       debit: string;
@@ -70,16 +71,31 @@ export class LedgerService {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
 
-    // Check for idempotency if key provided
+    // Check for idempotency if key provided using the dedicated idempotencyKeys table
     if (params.idempotencyKey) {
-      const [existingTx] = await db
+      const [existingIdempotencyKey] = await db
         .select()
-        .from(ledgerTransactions)
-        .where(eq(ledgerTransactions.idempotencyKey, params.idempotencyKey))
+        .from(idempotencyKeys)
+        .where(eq(idempotencyKeys.idempotencyKey, params.idempotencyKey))
         .limit(1);
       
-      if (existingTx) {
-        return existingTx.id;
+      if (existingIdempotencyKey) {
+        // If the key exists, it means the transaction was already processed or is in progress.
+        // We need to return the ID of the previously recorded transaction associated with this key.
+        // For now, we'll assume the idempotencyKey in ledgerTransactions is still the reference.
+        // A more robust solution would store the transactionId in the idempotencyKeys table.
+        const [existingTx] = await db
+          .select()
+          .from(ledgerTransactions)
+          .where(eq(ledgerTransactions.idempotencyKey, params.idempotencyKey))
+          .limit(1);
+        if (existingTx) {
+          return existingTx.id;
+        } else {
+          // This scenario indicates an inconsistency: idempotency key exists but no transaction.
+          // For now, we'll throw an error, but a retry mechanism or more complex handling might be needed.
+          throw new Error(`Idempotency key ${params.idempotencyKey} found, but no associated ledger transaction.`);
+        }
       }
     }
 
@@ -100,6 +116,15 @@ export class LedgerService {
         escrowContractId: params.escrowContractId,
         idempotencyKey: params.idempotencyKey,
       });
+
+      // Record the idempotency key in the dedicated table
+      if (params.idempotencyKey) {
+        await tx.insert(idempotencyKeys).values({
+          idempotencyKey: params.idempotencyKey,
+          transactionId: txId,
+          // expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // Example: key expires in 24 hours
+        });
+      }
 
       const txId = txHeader.insertId;
 
