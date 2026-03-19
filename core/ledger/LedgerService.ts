@@ -3,6 +3,7 @@ import { accountBalancesCache } from "../../drizzle/schema_ledger";
 import { getDb } from "../../server/db";
 import { ledgerAccounts, ledgerTransactions, ledgerEntries } from "../../drizzle/schema_ledger";
 import { idempotencyKeys } from "../../drizzle/schema_idempotency";
+import { FraudDetectionService } from "../utils/FraudDetectionService";
 import { eventBus } from "../events/EventBus";
 import { EventType } from "../events/EventTypes";
 
@@ -109,6 +110,17 @@ export class LedgerService {
 
     if (Math.abs(totalDebit - totalCredit) > 0.0001) {
       throw new Error(`Inconsistent Ledger Entry: Total Debit (${totalDebit}) != Total Credit (${totalCredit})`);
+    }
+
+    // Basic Fraud Detection
+    const isFraudulent = await FraudDetectionService.detectFraud({
+      amount: totalDebit.toFixed(4),
+      isSystemTransaction: params.isSystemTransaction,
+      // Add more fields from params as needed for fraud detection
+    });
+
+    if (isFraudulent) {
+      throw new Error("Transaction flagged as potentially fraudulent.");
     }
 
     const transactionId = await db.transaction(async (tx) => {
