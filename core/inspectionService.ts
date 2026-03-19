@@ -3,7 +3,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import { getDb } from "../db";
-import { inspectionReports } from "../drizzle/schema_new_features";
+import { inspectionReports } from "../drizzle/schema";
 import {
   createInspectionReport,
   getInspectionReportById,
@@ -12,7 +12,7 @@ import {
   getAllInspectionAgents,
   getInspectionAgentByUserId,
   getFeatureSettings,
-} from "../db_new_features";
+} from "../db";
 import { getEscrowById, getUserById } from "../db";
 
 export const inspectionServiceRouter = router({

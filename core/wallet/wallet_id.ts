@@ -7,7 +7,7 @@ import { eq, and, or } from "drizzle-orm";
 import { Decimal } from "decimal.js";
 import { generateOTP, sendSMS } from "../core/utils";
 import { encryptData } from "../core/encryption";
-import { createAuditLog } from "../db-enhanced";
+import { createAuditLog } from "../db";
 
 /**
  * Wathiqly ID & Pay Wallet Router

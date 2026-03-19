@@ -10,7 +10,7 @@ import {
   cancelTimedLink,
   markExpiredTimedLinks,
   getFeatureSettings,
-} from "../db_new_features";
+} from "../db";
 import { getUserById, createEscrow, getOrCreateWallet } from "../db";
 
 export const timedLinksRouter = router({

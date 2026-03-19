@@ -5,16 +5,18 @@ import { users, wallets, transactions } from "../../drizzle/schema";
 import { p2pTransfers, billPayments, ssoClients, ssoAuthorizations, walletAuditLogs } from "../../drizzle/schema_wallet_id";
 import { eq, and, desc, gt } from "drizzle-orm";
 import { Decimal } from "decimal.js";
-import { encryptData } from "../core/encryption";
-import { createAuditLog } from "../db-enhanced";
+
+import { createAuditLog } from "../db";
 import crypto from "crypto";
 import {
-  createRateLimiter,
+  createFinancialRateLimiter,
   FINANCIAL_RATE_LIMITS,
   idempotencyManager,
   createFinancialValidator,
   createAuditTrailLogger,
-} from "../core/security_middleware";
+  createEncryptionManager
+} from "../core/security";
+import { ENV } from "../core/env";
 
 /**
  * Enhanced Wathiqly ID & Pay Wallet Router
@@ -22,9 +24,10 @@ import {
  * Compliance: OWASP, PCI-DSS, ISO 27001
  */
 
-const rateLimiter = createRateLimiter(FINANCIAL_RATE_LIMITS);
+const rateLimiter = createFinancialRateLimiter(FINANCIAL_RATE_LIMITS);
 const financialValidator = createFinancialValidator();
 const auditTrailLogger = createAuditTrailLogger(process.env.SERVER_SECRET || "default-secret");
+const encryptionManager = createEncryptionManager(ENV.encryptionKey!);
 
 export const walletIdEnhancedRouter = router({
   
@@ -167,7 +170,7 @@ export const walletIdEnhancedRouter = router({
           senderId: user.id,
           receiverId: receiverId,
           amount: amount.toString(),
-          noteEncrypted: input.note ? encryptData(input.note) : null,
+          noteEncrypted: input.note ? encryptionManager.encrypt(input.note) : null,
           reference,
           status: "completed",
           ipAddress: ctx.req.ip,

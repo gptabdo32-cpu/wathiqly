@@ -10,8 +10,8 @@ import {
   updateDisputeCollateralWallet,
   getFeatureSettings,
   getDb,
-} from "../db_new_features";
-import { disputeCollateralWallets, disputeCollaterals } from "../drizzle/schema_new_features";
+} from "../db";
+import { disputeCollateralWallets, disputeCollaterals } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { getEscrowById, getUserById } from "../db";
 

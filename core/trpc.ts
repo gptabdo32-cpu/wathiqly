@@ -10,20 +10,7 @@ const t = initTRPC.context<TrpcContext>().create({
 export const router = t.router;
 export const publicProcedure = t.procedure;
 
-/**
- * Middleware for CSRF protection.
- * Ensures that non-GET requests have the 'x-trpc-source' header.
- */
-const csrfMiddleware = t.middleware(async (opts) => {
-  const { ctx, next } = opts;
-  if (ctx.req.method !== "GET" && !ctx.req.headers["x-trpc-source"]) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "CSRF protection: Missing required header",
-    });
-  }
-  return next();
-});
+
 
 /**
  * Middleware to ensure the user is authenticated.
@@ -59,10 +46,8 @@ const requireAdmin = t.middleware(async (opts) => {
 
 // Procedures
 export const protectedProcedure = t.procedure
-  .use(csrfMiddleware)
   .use(requireUser);
 
 export const adminProcedure = t.procedure
-  .use(csrfMiddleware)
   .use(requireUser)
   .use(requireAdmin);

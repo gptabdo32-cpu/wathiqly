@@ -41,7 +41,7 @@ export const adminRouter = router({
       kycStatus: z.enum(["verified", "pending", "rejected"]).optional(),
     }))
     .query(async ({ input }) => {
-      const { getAllUsers } = await import("../db-enhanced");
+      const { getAllUsers } = await import("../db");
       return await getAllUsers(input);
     }),
 
@@ -80,7 +80,7 @@ export const adminRouter = router({
   listTransactions: adminProcedure
     .input(z.object({ limit: z.number().default(50), offset: z.number().default(0) }))
     .query(async () => {
-      const { getAllTransactions } = await import("../db-enhanced");
+      const { getAllTransactions } = await import("../db");
       return await getAllTransactions();
     }),
 
@@ -102,7 +102,7 @@ export const adminRouter = router({
   listDisputes: adminProcedure
     .input(z.object({ limit: z.number().default(50), offset: z.number().default(0) }))
     .query(async () => {
-      const { getAllDisputes } = await import("../db-enhanced");
+      const { getAllDisputes } = await import("../db");
       return await getAllDisputes();
     }),
 
@@ -139,7 +139,7 @@ export const adminRouter = router({
   getAdminLogs: adminProcedure
     .input(z.object({ limit: z.number().default(50), offset: z.number().default(0) }))
     .query(async () => {
-      const { getAdminLogs } = await import("../db-enhanced");
+      const { getAdminLogs } = await import("../db");
       return await getAdminLogs();
     }),
 
@@ -153,7 +153,7 @@ export const adminRouter = router({
       reason: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const { updateUserKycStatus, createNotification } = await import("../db-enhanced");
+      const { updateUserKycStatus, createNotification } = await import("../db");
       
       await updateUserKycStatus(input.userId, input.status);
       

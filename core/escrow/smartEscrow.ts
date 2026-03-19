@@ -12,13 +12,18 @@ import {
   getEscrowBlockchainLogs,
   addMilestoneSignature,
   getMilestoneSignatures,
-} from "../db_smart_escrow";
+} from "../db";
 import { getEscrowById, updateEscrowStatus } from "../db";
-import { encryptData, decryptData } from "../core/encryption"; // Import encryption utilities
-import { generateSecureToken } from "../core/utils"; // Assuming a utility to generate tokens
-import { createAuditLog } from "../db-enhanced";
+import { createEncryptionManager, createFinancialRateLimiter, FINANCIAL_RATE_LIMITS } from "../core/security"; // Import security utilities
+import { ENV } from "../core/env";
+
+const encryptionManager = createEncryptionManager(ENV.encryptionKey!);
+import { generateSecureToken } from "../core/utils";
+
+const financialRateLimiter = createFinancialRateLimiter(FINANCIAL_RATE_LIMITS);
+import { createAuditLog } from "../db";
 import { invokeLLM } from "../core/llm";
-import { createAiArbitratorAnalysis, getLatestAiArbitratorAnalysis } from "../db_ai_arbitrator";
+import { createAiArbitratorAnalysis, getLatestAiArbitratorAnalysis } from "../db";
 
 export const smartEscrowRouter = router({
   // ============ AI ARBITRATOR ============
@@ -58,6 +63,7 @@ export const smartEscrowRouter = router({
 
       try {
         // Use Manus Forge LLM for professional legal analysis
+                financialRateLimiter("analyzeEscrowContract", ctx.user.id);
         const llmResponse = await invokeLLM({
           messages: [
             { 

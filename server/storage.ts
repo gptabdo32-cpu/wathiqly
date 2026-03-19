@@ -72,6 +72,15 @@ export async function storagePut(
   data: Buffer | Uint8Array | string,
   contentType = "application/octet-stream"
 ): Promise<{ key: string; url: string }> {
+  // Validate file size and type
+  const maxSizeInBytes = ENV.maxUploadSizeMB * 1024 * 1024;
+  if (data.length > maxSizeInBytes) {
+    throw new Error(`File size exceeds the maximum allowed limit of ${ENV.maxUploadSizeMB}MB.`);
+  }
+
+  if (!ENV.allowedUploadMimeTypes.includes(contentType)) {
+    throw new Error(`File type ${contentType} is not allowed. Allowed types are: ${ENV.allowedUploadMimeTypes.join(', ')}.`);
+  }
   const { baseUrl, apiKey } = getStorageConfig();
   const key = normalizeKey(relKey);
   const uploadUrl = buildUploadUrl(baseUrl, key);

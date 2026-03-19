@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { processEscrowCompletion } from './db-enhanced';
+import { processEscrowCompletion } from './db';
 import * as dbModule from './db';
 
 // محاكاة وحدة قاعدة البيانات

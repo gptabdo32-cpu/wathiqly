@@ -4,10 +4,12 @@ import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
+import cors from "cors";
+import { corsOptions } from "./security";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";\nimport { initializeSubscribers } from "./events/Subscribers";
-import { limiter, authLimiter } from "./middleware";
+import { generalLimiter, authLimiter, helmetConfig, mongoSanitizeMiddleware, xssCleanMiddleware, hppMiddleware, securityHeadersMiddleware } from "./security";
 import multer from "multer";
 import { storagePut } from "../storage";
 import { nanoid } from "nanoid";
@@ -35,15 +37,13 @@ async function startServer() {\n  // Initialize Smart Event Bus System\n  initia
   const app = express();
   const server = createServer(app);
 
-  // Security: Basic Security Headers
-  app.use((req, res, next) => {
-    res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("X-Frame-Options", "DENY");
-    res.setHeader("X-XSS-Protection", "1; mode=block");
-    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
-    res.setHeader("Content-Security-Policy", "default-src 'self'; img-src 'self' data: https:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';");
-    next();
-  });
+  // Apply comprehensive security middlewares
+  app.use(helmetConfig);
+  app.use(mongoSanitizeMiddleware);
+  app.use(xssCleanMiddleware);
+  app.use(hppMiddleware);
+  app.use(securityHeadersMiddleware);
+  app.use(cors(corsOptions));
 
   // Configure body parser with controlled size limits
   app.use(express.json({ limit: "20mb" }));
@@ -126,13 +126,14 @@ async function startServer() {\n  // Initialize Smart Event Bus System\n  initia
   });
 
   // OAuth callback under /api/oauth/callback
-  app.use("/api/oauth", authLimiter);
+  app.use("/api/oauth", authLimiter); // Apply authLimiter to OAuth routes
+
   registerOAuthRoutes(app);
 
   // tRPC API with global rate limiting
   app.use(
     "/api/trpc",
-    limiter,
+    generalLimiter, // Apply general rate limiter to all tRPC routes
     createExpressMiddleware({
       router: appRouter,
       createContext,

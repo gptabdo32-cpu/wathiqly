@@ -11,7 +11,7 @@ import {
 } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { Decimal } from "decimal.js";
-import { createNotification } from "../db-enhanced";
+import { createNotification } from "../db";
 
 /**
  * Payment Admin Router

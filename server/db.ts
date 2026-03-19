@@ -1,5 +1,7 @@
-import { eq, and, desc, gte, lte, or } from "drizzle-orm";
+import { eq, and, desc, gte, lte, or, like } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
+import { Decimal } from "decimal.js";
+import { TRPCError } from "@trpc/server";
 import {
   InsertUser,
   users,
@@ -36,8 +38,15 @@ import {
   InsertChatReadReceipt,
   chatAttachments,
   InsertChatAttachment,
+  disputeMessages,
+  disputeEvidence,
+  disputes,
+  auditLogs,
 } from "../drizzle/schema";
 import { ENV } from "./core/env";
+import { createEncryptionManager } from "./core/security";
+
+const encryptionManager = createEncryptionManager(ENV.encryptionKey!);
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -138,7 +147,18 @@ export async function getUserById(id: number) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// ============ WALLET OPERATIONS ============
+export async function updateUserProfile(id: number, profile: Partial<InsertUser>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    await db.update(users).set(profile).where(eq(users.id, id));
+  } catch (error) {
+    handleDbError(error, "Failed to update user profile");
+  }
+}
+
+// ============ WALLET & FINANCIAL OPERATIONS ============
 
 export async function getOrCreateWallet(userId: number) {
   const db = await getDb();
@@ -168,7 +188,53 @@ export async function getWalletByUserId(userId: number) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// ============ TRANSACTION OPERATIONS ============
+/**
+ * Update wallet balance within a database transaction
+ * Ensures atomic operations for wallet updates
+ */
+export async function updateWalletBalance(
+  userId: number,
+  amountChange: string,
+  operation: "add" | "subtract"
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return await db.transaction(async (tx) => {
+    // Get current wallet with FOR UPDATE lock to prevent race conditions
+    const [wallet] = await tx.select().from(wallets).where(eq(wallets.userId, userId)).limit(1).for("update");
+
+    if (!wallet) {
+      throw new Error("Wallet not found");
+    }
+
+    const currentBalance = new Decimal(wallet.balance);
+    const change = new Decimal(amountChange);
+
+    let newBalance = currentBalance;
+    if (operation === "add") {
+      newBalance = currentBalance.plus(change);
+    } else if (operation === "subtract") {
+      if (currentBalance.lt(change)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Insufficient balance",
+        });
+      }
+      newBalance = currentBalance.minus(change);
+    }
+
+    const finalBalance = newBalance.toFixed(2);
+
+    // Update wallet
+    await tx.update(wallets).set({
+      balance: finalBalance,
+      updatedAt: new Date(),
+    }).where(eq(wallets.id, wallet.id));
+
+    return finalBalance;
+  });
+}
 
 export async function createTransaction(transaction: InsertTransaction) {
   const db = await getDb();
@@ -250,7 +316,264 @@ export async function updateEscrowStatus(id: number, status: string) {
   }
 }
 
-// ============ DIGITAL PRODUCT OPERATIONS ============
+/**
+ * Process escrow completion with atomic transaction
+ * Ensures money transfer from buyer to seller is atomic
+ */
+export async function processEscrowCompletion(escrowId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return await db.transaction(async (tx) => {
+    // Get escrow details with FOR UPDATE lock
+    const [escrow] = await tx.select().from(escrows).where(eq(escrows.id, escrowId)).limit(1).for("update");
+
+    if (!escrow) {
+      throw new Error("Escrow not found");
+    }
+
+    if (escrow.status !== "delivered") {
+      throw new Error("Escrow is not in delivered status");
+    }
+
+    // Get wallets with FOR UPDATE lock to prevent race conditions
+    const [buyerWallet] = await tx.select().from(wallets).where(eq(wallets.userId, escrow.buyerId)).limit(1).for("update");
+    if (!buyerWallet) throw new Error("Buyer wallet not found");
+
+    const [sellerWallet] = await tx.select().from(wallets).where(eq(wallets.userId, escrow.sellerId)).limit(1).for("update");
+    if (!sellerWallet) throw new Error("Seller wallet not found");
+
+    const amount = new Decimal(escrow.amount);
+    const commission = new Decimal(escrow.commissionAmount);
+    const sellerAmount = amount.minus(commission);
+
+    // Update seller wallet
+    const currentSellerBalance = new Decimal(sellerWallet.balance);
+    const currentTotalEarned = new Decimal(sellerWallet.totalEarned);
+    
+    await tx.update(wallets).set({
+      balance: currentSellerBalance.plus(sellerAmount).toFixed(2),
+      totalEarned: currentTotalEarned.plus(sellerAmount).toFixed(2),
+      updatedAt: new Date(),
+    }).where(eq(wallets.id, sellerWallet.id));
+
+    // Update escrow status
+    await tx.update(escrows).set({
+      status: "completed",
+      completedAt: new Date(),
+      updatedAt: new Date(),
+    }).where(eq(escrows.id, escrowId));
+
+    // Create transaction records
+    await tx.insert(transactions).values({
+      userId: escrow.sellerId,
+      type: "deposit",
+      amount: sellerAmount.toFixed(2),
+      referenceType: "escrow",
+      referenceId: escrowId,
+      description: `Payment received for escrow: ${escrow.title}`,
+      status: "completed",
+    } as any);
+
+    await tx.insert(transactions).values({
+      userId: escrow.buyerId,
+      type: "commission",
+      amount: commission.toFixed(2),
+      referenceType: "escrow",
+      referenceId: escrowId,
+      description: `Commission for escrow: ${escrow.title}`,
+      status: "completed",
+    } as any);
+
+    return { success: true, sellerAmount: sellerAmount.toFixed(2) };
+  });
+}
+
+// ============ DISPUTE OPERATIONS ============
+
+export async function resolveDispute(
+  adminId: number,
+  escrowId: number,
+  decision: "buyer" | "seller" | "split",
+  resolution: string
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return await db.transaction(async (tx) => {
+    const [escrow] = await tx.select().from(escrows).where(eq(escrows.id, escrowId)).limit(1).for("update");
+    if (!escrow) throw new Error("Escrow not found");
+
+    const amount = new Decimal(escrow.amount);
+    const commission = new Decimal(escrow.commissionAmount);
+
+    if (decision === "buyer") {
+      // Refund to buyer
+      const [wallet] = await tx.select().from(wallets).where(eq(wallets.userId, escrow.buyerId)).limit(1).for("update");
+      if (wallet) {
+        await tx.update(wallets)
+          .set({ balance: new Decimal(wallet.balance).plus(amount).toFixed(2) })
+          .where(eq(wallets.id, wallet.id));
+      }
+
+      await tx.insert(transactions).values({
+        userId: escrow.buyerId,
+        type: "refund",
+        amount: amount.toFixed(2),
+        status: "completed",
+        escrowId,
+        description: `Dispute resolved in favor of buyer. Full refund issued.`,
+      } as any);
+
+    } else if (decision === "seller") {
+      // Release to seller (amount - commission if seller paid it)
+      const releaseAmount = escrow.commissionPaidBy === "seller" 
+        ? amount.minus(commission).toFixed(2) 
+        : amount.toFixed(2);
+
+      const [wallet] = await tx.select().from(wallets).where(eq(wallets.userId, escrow.sellerId)).limit(1).for("update");
+      if (wallet) {
+        await tx.update(wallets)
+          .set({ 
+            balance: new Decimal(wallet.balance).plus(releaseAmount).toFixed(2),
+            totalEarned: new Decimal(wallet.totalEarned).plus(releaseAmount).toFixed(2)
+          })
+          .where(eq(wallets.id, wallet.id));
+      }
+
+      await tx.insert(transactions).values({
+        userId: escrow.sellerId,
+        type: "deposit",
+        amount: releaseAmount,
+        status: "completed",
+        escrowId,
+        description: `Dispute resolved in favor of seller. Funds released.`,
+      } as any);
+
+    } else if (decision === "split") {
+      // Split 50/50
+      const splitAmount = amount.div(2).toFixed(2);
+      
+      // Buyer part
+      const [bWallet] = await tx.select().from(wallets).where(eq(wallets.userId, escrow.buyerId)).limit(1).for("update");
+      if (bWallet) {
+        await tx.update(wallets)
+          .set({ balance: new Decimal(bWallet.balance).plus(splitAmount).toFixed(2) })
+          .where(eq(wallets.id, bWallet.id));
+      }
+
+      // Seller part
+      const [sWallet] = await tx.select().from(wallets).where(eq(wallets.userId, escrow.sellerId)).limit(1).for("update");
+      if (sWallet) {
+        await tx.update(wallets)
+          .set({ 
+            balance: new Decimal(sWallet.balance).plus(splitAmount).toFixed(2),
+            totalEarned: new Decimal(sWallet.totalEarned).plus(splitAmount).toFixed(2)
+          })
+          .where(eq(wallets.id, sWallet.id));
+      }
+
+      await tx.insert(transactions).values({
+        userId: escrow.buyerId,
+        type: "refund",
+        amount: splitAmount,
+        status: "completed",
+        escrowId,
+        description: `Dispute resolved with split decision. 50% refund issued.`,
+      } as any);
+
+      await tx.insert(transactions).values({
+        userId: escrow.sellerId,
+        type: "deposit",
+        amount: splitAmount,
+        status: "completed",
+        escrowId,
+        description: `Dispute resolved with split decision. 50% funds released.`,
+      } as any);
+    }
+
+    // Update escrow status
+    await tx.update(escrows)
+      .set({ 
+        status: "completed", 
+        disputeResolution: resolution,
+        disputeResolvedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(escrows.id, escrowId));
+
+    // Log admin action
+    await tx.insert(adminLogs).values({
+      adminId,
+      action: "resolve_dispute",
+      targetType: "escrow",
+      targetId: escrowId,
+      details: JSON.stringify({ decision, resolution }),
+    });
+
+    return { success: true };
+  });
+}
+
+/**
+ * Add dispute message with encryption for sensitive content
+ */
+export async function addDisputeMessage(
+  escrowId: number,
+  senderId: number,
+  message: string,
+  shouldEncrypt: boolean = false
+) {
+  const messageContent = shouldEncrypt ? encryptionManager.encrypt(message) : message;
+
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return await db.insert(disputeMessages).values({
+    escrowId,
+    senderId,
+    message: messageContent,
+  });
+}
+
+/**
+ * Get dispute messages with decryption
+ */
+export async function getDisputeMessages(escrowId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const messages = await db.select().from(disputeMessages).where(eq(disputeMessages.escrowId, escrowId));
+
+  return messages.map((msg) => ({
+    ...msg,
+    message: msg.message.includes(":") ? encryptionManager.decrypt(msg.message) : msg.message,
+  }));
+}
+
+/**
+ * Upload dispute evidence
+ */
+export async function uploadDisputeEvidence(
+  escrowId: number,
+  uploaderId: number,
+  fileUrl: string,
+  fileType: string,
+  description?: string
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return await db.insert(disputeEvidence).values({
+    escrowId,
+    uploaderId,
+    fileUrl,
+    fileType,
+    description,
+  });
+}
+
+// ============ PRODUCT OPERATIONS ============
 
 export async function createDigitalProduct(product: InsertDigitalProduct) {
   const db = await getDb();
@@ -350,258 +673,8 @@ export async function getFeaturedProducts() {
 
   const digital = await db.select().from(digitalProducts).where(and(eq(digitalProducts.isActive, true), eq(digitalProducts.isFeatured, true))).limit(4);
   const physical = await db.select().from(physicalProducts).where(and(eq(physicalProducts.isActive, true), eq(physicalProducts.isFeatured, true))).limit(4);
-  const vehicle = await db.select().from(vehicles).where(and(eq(vehicles.isActive, true), eq(vehicles.isFeatured, true))).limit(4);
-  const service = await db.select().from(services).where(and(eq(services.isActive, true), eq(services.isFeatured, true))).limit(4);
-
-  return { digital, physical, vehicle, service };
-}
-
-export async function getProductById(id: number, type: "digital" | "physical" | "vehicle" | "service") {
-  const db = await getDb();
-  if (!db) return undefined;
-
-  let table: any = digitalProducts;
-  if (type === "physical") table = physicalProducts;
-  else if (type === "vehicle") table = vehicles;
-  else if (type === "service") table = services;
-
-  const result = await db.select().from(table).where(eq(table.id, id)).limit(1);
-  return result.length > 0 ? result[0] : undefined;
-}
-
-// ============ REVIEW OPERATIONS ============
-
-export async function createReview(review: InsertReview) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  try {
-    return await db.insert(reviews).values(review);
-  } catch (error) {
-    handleDbError(error, "Failed to create review");
-  }
-}
-
-export async function getUserReviews(userId: number, limit: number = 50, offset: number = 0) {
-  const db = await getDb();
-  if (!db) return [];
-
-  return await db
-    .select()
-    .from(reviews)
-    .where(eq(reviews.revieweeId, userId))
-    .orderBy(desc(reviews.createdAt))
-    .limit(limit)
-    .offset(offset);
-}
-
-// ============ WITHDRAWAL OPERATIONS ============
-
-export async function createWithdrawalRequest(request: InsertWithdrawalRequest) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  try {
-    return await db.insert(withdrawalRequests).values(request);
-  } catch (error) {
-    handleDbError(error, "Failed to create withdrawal request");
-  }
-}
-
-export async function getUserWithdrawals(userId: number, limit: number = 50, offset: number = 0) {
-  const db = await getDb();
-  if (!db) return [];
-
-  return await db
-    .select()
-    .from(withdrawalRequests)
-    .where(eq(withdrawalRequests.userId, userId))
-    .orderBy(desc(withdrawalRequests.createdAt))
-    .limit(limit)
-    .offset(offset);
-}
-
-export async function getPendingWithdrawals(limit: number = 50, offset: number = 0) {
-  const db = await getDb();
-  if (!db) return [];
-
-  return await db
-    .select()
-    .from(withdrawalRequests)
-    .where(eq(withdrawalRequests.status, "pending"))
-    .orderBy(desc(withdrawalRequests.createdAt))
-    .limit(limit)
-    .offset(offset);
-}
-
-// ============ ADMIN OPERATIONS ============
-
-export async function getAdminStats() {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  // Get total escrow volume (funded, delivered, completed, disputed)
-  const allEscrows = await db.select().from(escrows);
-  const totalVolume = allEscrows
-    .filter(e => ["funded", "delivered", "completed", "disputed"].includes(e.status))
-    .reduce((sum, e) => sum + parseFloat(e.amount), 0);
-
-  const activeDisputes = allEscrows.filter(e => e.status === "disputed").length;
   
-  const totalUsers = (await db.select().from(users)).length;
-  
-  return {
-    totalVolume: totalVolume.toFixed(2),
-    activeDisputes,
-    totalUsers,
-    totalTransactions: allEscrows.length
-  };
-}
-
-export async function resolveDispute(
-  escrowId: number,
-  adminId: number,
-  decision: "buyer" | "seller" | "split",
-  resolution: string
-) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  return await db.transaction(async (tx) => {
-    const [escrow] = await tx
-      .select()
-      .from(escrows)
-      .where(eq(escrows.id, escrowId))
-      .limit(1)
-      .for("update");
-
-    if (!escrow) throw new Error("Escrow not found");
-    if (escrow.status !== "disputed") throw new Error("Escrow is not in disputed status");
-
-    const amount = new Decimal(escrow.amount);
-    const commission = new Decimal(escrow.commissionAmount);
-
-    if (decision === "buyer") {
-      // Refund buyer (amount + commission if buyer paid it)
-      const refundAmount = escrow.commissionPaidBy === "buyer" 
-        ? amount.plus(commission).toFixed(2) 
-        : amount.toFixed(2);
-      
-      const [wallet] = await tx.select().from(wallets).where(eq(wallets.userId, escrow.buyerId)).limit(1).for("update");
-      if (wallet) {
-        await tx.update(wallets)
-          .set({ balance: new Decimal(wallet.balance).plus(refundAmount).toFixed(2) })
-          .where(eq(wallets.id, wallet.id));
-      }
-
-      await tx.insert(transactions).values({
-        userId: escrow.buyerId,
-        type: "refund",
-        amount: refundAmount,
-        status: "completed",
-        escrowId,
-        description: `Dispute resolved in favor of buyer. Full refund issued.`,
-      } as any);
-
-    } else if (decision === "seller") {
-      // Release to seller (amount - commission if seller paid it)
-      const releaseAmount = escrow.commissionPaidBy === "seller" 
-        ? amount.minus(commission).toFixed(2) 
-        : amount.toFixed(2);
-
-      const [wallet] = await tx.select().from(wallets).where(eq(wallets.userId, escrow.sellerId)).limit(1).for("update");
-      if (wallet) {
-        await tx.update(wallets)
-          .set({ 
-            balance: new Decimal(wallet.balance).plus(releaseAmount).toFixed(2),
-            totalEarned: new Decimal(wallet.totalEarned).plus(releaseAmount).toFixed(2)
-          })
-          .where(eq(wallets.id, wallet.id));
-      }
-
-      await tx.insert(transactions).values({
-        userId: escrow.sellerId,
-        type: "deposit",
-        amount: releaseAmount,
-        status: "completed",
-        escrowId,
-        description: `Dispute resolved in favor of seller. Funds released.`,
-      } as any);
-
-    } else if (decision === "split") {
-      // Split 50/50
-      const splitAmount = amount.div(2).toFixed(2);
-      
-      // Buyer part
-      const [bWallet] = await tx.select().from(wallets).where(eq(wallets.userId, escrow.buyerId)).limit(1).for("update");
-      if (bWallet) {
-        await tx.update(wallets)
-          .set({ balance: new Decimal(bWallet.balance).plus(splitAmount).toFixed(2) })
-          .where(eq(wallets.id, bWallet.id));
-      }
-
-      // Seller part
-      const [sWallet] = await tx.select().from(wallets).where(eq(wallets.userId, escrow.sellerId)).limit(1).for("update");
-      if (sWallet) {
-        await tx.update(wallets)
-          .set({ 
-            balance: new Decimal(sWallet.balance).plus(splitAmount).toFixed(2),
-            totalEarned: new Decimal(sWallet.totalEarned).plus(splitAmount).toFixed(2)
-          })
-          .where(eq(wallets.id, sWallet.id));
-      }
-
-      await tx.insert(transactions).values({
-        userId: escrow.buyerId,
-        type: "refund",
-        amount: splitAmount,
-        status: "completed",
-        escrowId,
-        description: `Dispute resolved with split decision. 50% refund issued.`,
-      } as any);
-
-      await tx.insert(transactions).values({
-        userId: escrow.sellerId,
-        type: "deposit",
-        amount: splitAmount,
-        status: "completed",
-        escrowId,
-        description: `Dispute resolved with split decision. 50% funds released.`,
-      } as any);
-    }
-
-    // Update escrow status
-    await tx.update(escrows)
-      .set({ 
-        status: "completed", 
-        disputeResolution: resolution,
-        disputeResolvedAt: new Date(),
-        updatedAt: new Date()
-      })
-      .where(eq(escrows.id, escrowId));
-
-    // Log admin action
-    await tx.insert(adminLogs).values({
-      adminId,
-      action: "resolve_dispute",
-      targetType: "escrow",
-      targetId: escrowId,
-      details: JSON.stringify({ decision, resolution }),
-    });
-
-    return { success: true };
-  });
-}
-
-export async function updateUserProfile(id: number, profile: Partial<InsertUser>) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  try {
-    await db.update(users).set(profile).where(eq(users.id, id));
-  } catch (error) {
-    handleDbError(error, "Failed to update user profile");
-  }
+  return { digital, physical };
 }
 
 // ============ TRUSTED SELLER SUBSCRIPTION ============
@@ -663,6 +736,27 @@ export async function getUserNotifications(userId: number, limit: number = 50, o
     .offset(offset);
 }
 
+export async function getUnreadNotifications(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return await db.select().from(notifications).where(
+    and(
+      eq(notifications.userId, userId),
+      eq(notifications.isRead, false)
+    )
+  );
+}
+
+export async function markNotificationAsRead(notificationId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  return await db.update(notifications).set({
+    isRead: true,
+  }).where(eq(notifications.id, notificationId));
+}
+
 // ============ PLATFORM SETTINGS ============
 
 export async function getPlatformSettings() {
@@ -684,7 +778,7 @@ export async function updatePlatformSettings(settings: InsertPlatformSettings) {
   }
 }
 
-// ============ ADMIN LOGS ============
+// ============ ADMIN OPERATIONS ============
 
 export async function createAdminLog(log: InsertAdminLog) {
   const db = await getDb();
@@ -694,6 +788,202 @@ export async function createAdminLog(log: InsertAdminLog) {
     return await db.insert(adminLogs).values(log);
   } catch (error) {
     handleDbError(error, "Failed to create admin log");
+  }
+}
+
+export async function getAllUsers(options?: {
+  search?: string;
+  kycStatus?: "verified" | "pending" | "rejected";
+  status?: "active" | "suspended";
+  limit?: number;
+  offset?: number;
+}) {
+  const db = await getDb();
+  if (!db) return [];
+
+  let query = db.select().from(users);
+
+  if (options?.search) {
+    query = query.where(
+      or(
+        like(users.name, `%${options.search}%`),
+        like(users.email, `%${options.search}%`)
+      )
+    );
+  }
+
+  if (options?.kycStatus) {
+    query = query.where(eq(users.kycStatus, options.kycStatus));
+  }
+
+  if (options?.status) {
+    query = query.where(eq(users.status, options.status));
+  }
+
+  query = query
+    .orderBy(desc(users.createdAt))
+    .limit(options?.limit || 50)
+    .offset(options?.offset || 0);
+
+  try {
+    return await query;
+  } catch (error) {
+    console.error("[Database] Failed to get users:", error);
+    return [];
+  }
+}
+
+export async function updateUserKycStatus(
+  userId: number,
+  status: "verified" | "pending" | "rejected"
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    await db
+      .update(users)
+      .set({
+        kycStatus: status,
+        identityVerifiedAt: status === "verified" ? new Date() : null,
+      })
+      .where(eq(users.id, userId));
+  } catch (error) {
+    console.error("[Database] Failed to update KYC status:", error);
+    throw error;
+  }
+}
+
+export async function updateUserStatus(
+  userId: number,
+  status: "active" | "suspended"
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    await db
+      .update(users)
+      .set({ status })
+      .where(eq(users.id, userId));
+  } catch (error) {
+    console.error("[Database] Failed to update user status:", error);
+    throw error;
+  }
+}
+
+export async function getAdminStats() {
+  const db = await getDb();
+  if (!db) {
+    return {
+      totalUsers: 0,
+      totalVolume: 0,
+      activeDisputes: 0,
+      totalTransactions: 0,
+    };
+  }
+
+  try {
+    const userCount = await db.select({ count: db.sql<number>`COUNT(*)` }).from(users);
+    const volumeResult = await db.select({ total: db.sql<number>`SUM(amount)` }).from(escrows).where(eq(escrows.status, "pending"));
+    const disputeCount = await db.select({ count: db.sql<number>`COUNT(*)` }).from(disputes).where(eq(disputes.status, "open"));
+    const transactionCount = await db.select({ count: db.sql<number>`COUNT(*)` }).from(escrows);
+
+    return {
+      totalUsers: userCount[0]?.count || 0,
+      totalVolume: volumeResult[0]?.total || 0,
+      activeDisputes: disputeCount[0]?.count || 0,
+      totalTransactions: transactionCount[0]?.count || 0,
+    };
+  } catch (error) {
+    console.error("[Database] Failed to get admin stats:", error);
+    return { totalUsers: 0, totalVolume: 0, activeDisputes: 0, totalTransactions: 0 };
+  }
+}
+
+export async function getAllDisputes(options?: {
+  status?: "open" | "resolved" | "closed";
+  limit?: number;
+  offset?: number;
+}) {
+  const db = await getDb();
+  if (!db) return [];
+
+  let query = db.select().from(disputes);
+  if (options?.status) {
+    query = query.where(eq(disputes.status, options.status));
+  }
+
+  return await query
+    .orderBy(desc(disputes.createdAt))
+    .limit(options?.limit || 50)
+    .offset(options?.offset || 0);
+}
+
+export async function getAdminLogs(options?: {
+  limit?: number;
+  offset?: number;
+}) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(adminLogs)
+    .orderBy(desc(adminLogs.createdAt))
+    .limit(options?.limit || 50)
+    .offset(options?.offset || 0);
+}
+
+export async function getAllTransactions(options?: {
+  status?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const db = await getDb();
+  if (!db) return [];
+
+  let query = db.select().from(escrows);
+  if (options?.status) {
+    query = query.where(eq(escrows.status, options.status as any));
+  }
+
+  return await query
+    .orderBy(desc(escrows.createdAt))
+    .limit(options?.limit || 50)
+    .offset(options?.offset || 0);
+}
+
+export async function createAuditLog(log: {
+  userId: number;
+  action: string;
+  entityType?: string;
+  entityId?: number;
+  oldValue?: object;
+  newValue?: object;
+  ipAddress?: string;
+  userAgent?: string;
+}) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot create audit log: database not available");
+    return;
+  }
+
+  try {
+    await db.insert(auditLogs).values({
+      userId: log.userId,
+      action: log.action,
+      entityType: log.entityType,
+      entityId: log.entityId,
+      oldValue: log.oldValue ? JSON.stringify(log.oldValue) : null,
+      newValue: log.newValue ? JSON.stringify(log.newValue) : null,
+      ipAddress: log.ipAddress,
+      userAgent: log.userAgent,
+      createdAt: new Date(),
+    });
+  } catch (error) {
+    console.error("[Database] Failed to create audit log:", error);
   }
 }
 

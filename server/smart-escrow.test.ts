@@ -6,7 +6,7 @@ import {
   getEscrowIotDevices,
   logBlockchainTx,
   getEscrowBlockchainLogs
-} from "./db_smart_escrow";
+} from "./db";
 
 async function runTests() {
   console.log("🚀 Starting Smart Escrow Tests...");
