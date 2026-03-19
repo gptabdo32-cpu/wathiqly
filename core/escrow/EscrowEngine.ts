@@ -145,7 +145,8 @@ export class EscrowEngine {
       .select()
       .from(escrowContracts)
       .where(eq(escrowContracts.id, escrowId))
-      .limit(1);
+      .limit(1)
+      .for("update");
 
     if (!contract) throw new Error("Contract not found");
     
@@ -213,7 +214,8 @@ export class EscrowEngine {
       .select()
       .from(escrowContracts)
       .where(eq(escrowContracts.id, escrowId))
-      .limit(1);
+      .limit(1)
+      .for("update");
 
     if (!contract) throw new Error("Contract not found");
     
@@ -270,7 +272,8 @@ export class EscrowEngine {
       .select()
       .from(escrowContracts)
       .where(eq(escrowContracts.id, dispute.escrowId))
-      .limit(1);
+      .limit(1)
+      .for("update");
 
     if (!contract) throw new Error("Associated escrow contract not found");
 
