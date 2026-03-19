@@ -6,6 +6,7 @@ import { ledgerAccounts } from "../../drizzle/schema_ledger";
 import { eventBus } from "../events/EventBus";
 import { EventType } from "../events/EventTypes";
 import { blockchainService } from "../ledger/blockchain";
+import { outboxEvents } from "../../drizzle/schema_outbox";
 
 export type EscrowStatus = "pending" | "locked" | "released" | "disputed" | "refunded" | "cancelled";
 
@@ -100,11 +101,20 @@ export class EscrowEngine {
       return id;
     });
 
-    // 5. Blockchain Sync (Asynchronous / Background)
+    // 5. Blockchain Sync (via Outbox Pattern for reliable processing)
     if (params.sellerWalletAddress) {
-      this.syncToBlockchain(escrowId, params.sellerWalletAddress, params.amount).catch(err => 
-        console.error(`[EscrowEngine] Blockchain sync failed for Escrow #${escrowId}:`, err)
-      );
+      await db.insert(outboxEvents).values({
+        aggregateType: "escrow",
+        aggregateId: escrowId,
+        eventType: "EscrowCreateRequested",
+        payload: {
+          escrowId,
+          sellerWalletAddress: params.sellerWalletAddress,
+          amount: params.amount,
+        },
+        status: "pending",
+      });
+      console.log(`[EscrowEngine] Escrow #${escrowId} blockchain creation requested via outbox.`);
     }
 
     // 6. Publish Event: Funds Locked
@@ -121,34 +131,7 @@ export class EscrowEngine {
   /**
    * Background task to sync escrow to blockchain.
    */
-  private static async syncToBlockchain(escrowId: number, sellerAddress: string, amount: string) {
-    const db = await getDb();
-    if (!db) return;
 
-    try {
-      const amountInWei = blockchainService.toWei(amount);
-      const { txHash } = await blockchainService.createEscrow(
-        sellerAddress,
-        null, // mediator
-        `escrow_${escrowId}`,
-        amountInWei
-      );
-
-      await db.update(escrowContracts)
-        .set({ 
-          blockchainStatus: "synced", 
-          lastTxHash: txHash 
-        })
-        .where(eq(escrowContracts.id, escrowId));
-        
-      console.log(`[EscrowEngine] Escrow #${escrowId} synced to blockchain: ${txHash}`);
-    } catch (error) {
-      await db.update(escrowContracts)
-        .set({ blockchainStatus: "failed" })
-        .where(eq(escrowContracts.id, escrowId));
-      throw error;
-    }
-  }
 
   /**
    * Releases locked funds to the Seller.
@@ -198,20 +181,20 @@ export class EscrowEngine {
         ],
       });
 
-      // 4. Blockchain Sync if applicable
+      // 4. Blockchain Sync (via Outbox Pattern for reliable processing)
       if (contract.blockchainStatus === "synced" && contract.onChainId !== null) {
-        try {
-          // Assuming a single milestone or full release for simplicity
-          // In a real scenario, this would involve specific milestone IDs
-          const txHash = await blockchainService.releaseMilestone(contract.onChainId, 0); // Assuming milestone 0 for full release
-          await tx.update(escrowContracts)
-            .set({ lastTxHash: txHash })
-            .where(eq(escrowContracts.id, escrowId));
-          console.log(`[EscrowEngine] On-chain Escrow #${contract.onChainId} released. Tx: ${txHash}`);
-        } catch (error) {
-          console.error(`[EscrowEngine] Failed to release on-chain Escrow #${contract.onChainId}:`, error);
-          // Potentially update blockchainStatus to 'failed' or trigger a retry mechanism
-        }
+        await tx.insert(outboxEvents).values({
+          aggregateType: "escrow",
+          aggregateId: escrowId,
+          eventType: "EscrowReleaseRequested",
+          payload: {
+            escrowId,
+            onChainId: contract.onChainId,
+            milestoneId: 0, // Assuming milestone 0 for full release
+          },
+          status: "pending",
+        });
+        console.log(`[EscrowEngine] Escrow #${escrowId} blockchain release requested via outbox.`);
       }
 
       return true;
@@ -337,19 +320,21 @@ export class EscrowEngine {
         ],
       });
 
-      // 4. Blockchain Sync for dispute resolution if applicable
+      // 4. Blockchain Sync for dispute resolution (via Outbox Pattern for reliable processing)
       if (contract.blockchainStatus === "synced" && contract.onChainId !== null) {
-        try {
-          const releaseToSeller = resolution === "seller_payout";
-          const txHash = await blockchainService.resolveDispute(contract.onChainId, 0, releaseToSeller); // Assuming milestone 0
-          await tx.update(disputes)
-            .set({ blockchainTxHash: txHash })
-            .where(eq(disputes.id, disputeId));
-          console.log(`[EscrowEngine] On-chain Dispute #${contract.onChainId} resolved. Tx: ${txHash}`);
-        } catch (error) {
-          console.error(`[EscrowEngine] Failed to resolve on-chain Dispute #${contract.onChainId}:`, error);
-          // Potentially update blockchainStatus to 'failed' or trigger a retry mechanism
-        }
+        await tx.insert(outboxEvents).values({
+          aggregateType: "dispute",
+          aggregateId: disputeId,
+          eventType: "DisputeResolutionRequested",
+          payload: {
+            disputeId,
+            onChainId: contract.onChainId,
+            milestoneId: 0, // Assuming milestone 0
+            releaseToSeller: resolution === "seller_payout",
+          },
+          status: "pending",
+        });
+        console.log(`[EscrowEngine] Dispute #${disputeId} blockchain resolution requested via outbox.`);
       }
 
       return true;
