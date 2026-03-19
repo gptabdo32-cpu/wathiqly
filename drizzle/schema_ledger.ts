@@ -62,3 +62,16 @@ export const ledgerEntries = mysqlTable("ledger_entries", {
 export type LedgerAccount = typeof ledgerAccounts.$inferSelect;
 export type LedgerTransaction = typeof ledgerTransactions.$inferSelect;
 export type LedgerEntry = typeof ledgerEntries.$inferSelect;
+
+/**
+ * Account Balances Cache Table
+ * Stores the latest calculated balance for each ledger account to optimize read performance.
+ * This is a derived state and should always be updated within the same transaction as ledgerEntries.
+ */
+export const accountBalancesCache = mysqlTable("account_balances_cache", {
+  accountId: int("accountId").references(() => ledgerAccounts.id).primaryKey(),
+  balance: decimal("balance", { precision: 20, scale: 4 }).default("0.0000").notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type AccountBalanceCache = typeof accountBalancesCache.$inferSelect;

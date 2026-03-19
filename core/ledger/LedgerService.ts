@@ -1,4 +1,5 @@
 import { eq, sql, desc } from "drizzle-orm";
+import { accountBalancesCache } from "../../drizzle/schema_ledger";
 import { getDb } from "../../server/db";
 import { ledgerAccounts, ledgerTransactions, ledgerEntries } from "../../drizzle/schema_ledger";
 import { eventBus } from "../events/EventBus";
@@ -7,12 +8,24 @@ import { EventType } from "../events/EventTypes";
 export class LedgerService {
   /**
    * Calculates the current balance of an account from its ledger entries.
-   * Single source of truth is now the ledgerEntries table.
+   * Retrieves the current balance of an account, prioritizing the cached balance.
+   * If cache is not available or outdated, it will be recalculated from ledgerEntries.
    */
   static async getAccountBalance(accountId: number): Promise<number> {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
 
+    // Try to get from cache first
+    const [cachedBalance] = await db
+      .select()
+      .from(accountBalancesCache)
+      .where(eq(accountBalancesCache.accountId, accountId));
+
+    if (cachedBalance) {
+      return parseFloat(cachedBalance.balance);
+    }
+
+    // If not in cache, calculate from ledgerEntries (this should ideally not happen often)
     const [account] = await db
       .select()
       .from(ledgerAccounts)
@@ -20,7 +33,6 @@ export class LedgerService {
 
     if (!account) throw new Error(`Ledger Account ${accountId} not found`);
 
-    // Fetch the latest entry to get the balanceAfter snapshot
     const [lastEntry] = await db
       .select()
       .from(ledgerEntries)
@@ -28,9 +40,14 @@ export class LedgerService {
       .orderBy(desc(ledgerEntries.id))
       .limit(1);
 
-    if (!lastEntry) return 0;
+    const balance = lastEntry ? parseFloat(lastEntry.balanceAfter) : 0;
 
-    return parseFloat(lastEntry.balanceAfter);
+    // Populate cache for future reads
+    await db.insert(accountBalancesCache)
+      .values({ accountId, balance: balance.toFixed(4) })
+      .onDuplicateKeyUpdate({ set: { balance: balance.toFixed(4) } });
+
+    return balance;
   }
 
   /**
@@ -126,6 +143,11 @@ export class LedgerService {
           credit: entry.credit,
           balanceAfter: newBalance.toFixed(4),
         });
+
+        // Update the cached balance
+        await tx.insert(accountBalancesCache)
+          .values({ accountId: entry.accountId, balance: newBalance.toFixed(4) })
+          .onDuplicateKeyUpdate({ set: { balance: newBalance.toFixed(4) } });
       }
 
       return txId;
