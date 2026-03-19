@@ -1,5 +1,6 @@
 import { int, mysqlTable, text, timestamp, decimal, varchar, uniqueIndex } from "drizzle-orm/mysql-core";
 import { users } from "./schema";
+import { escrowContracts } from "./schema_escrow_engine";
 
 /**
  * Ledger Accounts Table
@@ -21,13 +22,17 @@ export const ledgerAccounts = mysqlTable("ledger_accounts", {
 /**
  * Ledger Transactions Table
  * Groups multiple entries into a single atomic financial event.
- * IMPROVEMENT: Added idempotencyKey to prevent duplicate processing.
+ * IMPROVEMENT: Added idempotencyKey and explicit escrowContractId foreign key.
  */
 export const ledgerTransactions = mysqlTable("ledger_transactions", {
   id: int("id").autoincrement().primaryKey(),
   description: text("description"),
   referenceType: varchar("referenceType", { length: 50 }), // e.g., "escrow", "payout", "deposit"
   referenceId: int("referenceId"), // ID of the related business entity
+  
+  // IMPROVEMENT: Real Foreign Key for Escrow link
+  escrowContractId: int("escrowContractId").references(() => escrowContracts.id),
+  
   idempotencyKey: varchar("idempotencyKey", { length: 255 }), // Unique key to prevent double processing
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => {

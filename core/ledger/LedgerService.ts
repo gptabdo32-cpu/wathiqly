@@ -36,12 +36,13 @@ export class LedgerService {
   /**
    * Performs a double-entry transaction between two or more accounts.
    * Ensures that total Debits = total Credits.
-   * IMPROVEMENT: Supports idempotencyKey to prevent duplicate transactions.
+   * IMPROVEMENT: Supports idempotencyKey and escrowContractId.
    */
   static async recordTransaction(params: {
     description: string;
     referenceType?: string;
     referenceId?: number;
+    escrowContractId?: number;
     idempotencyKey?: string;
     entries: {
       accountId: number;
@@ -61,7 +62,7 @@ export class LedgerService {
         .limit(1);
       
       if (existingTx) {
-        return existingTx.id; // Return existing transaction ID instead of re-processing
+        return existingTx.id;
       }
     }
 
@@ -79,6 +80,7 @@ export class LedgerService {
         description: params.description,
         referenceType: params.referenceType,
         referenceId: params.referenceId,
+        escrowContractId: params.escrowContractId,
         idempotencyKey: params.idempotencyKey,
       });
 
@@ -195,7 +197,6 @@ export class LedgerService {
 
   /**
    * Snapshot Balance Check: Ensures account balance matches sum of its entries.
-   * IMPROVED: Now compares the latest snapshot (balanceAfter) with the calculated sum.
    */
   static async auditAccountBalance(accountId: number) {
     const db = await getDb();

@@ -89,6 +89,7 @@ export class EscrowEngine {
         description: `Locking funds for Escrow #${id}`,
         referenceType: "escrow",
         referenceId: id,
+        escrowContractId: id,
         idempotencyKey: `escrow_lock_${id}`,
         entries: [
           { accountId: buyerAccount.id, debit: "0.0000", credit: params.amount }, // Decrease Buyer Liability
@@ -189,6 +190,7 @@ export class EscrowEngine {
         description: `Releasing funds for Escrow #${escrowId}`,
         referenceType: "escrow",
         referenceId: escrowId,
+        escrowContractId: escrowId,
         idempotencyKey: `escrow_release_${escrowId}`,
         entries: [
           { accountId: contract.escrowLedgerAccountId, debit: "0.0000", credit: contract.amount }, // Empty Escrow
@@ -318,6 +320,7 @@ export class EscrowEngine {
         description: `Resolving Dispute #${disputeId} via ${resolution}`,
         referenceType: "dispute",
         referenceId: disputeId,
+        escrowContractId: contract.id,
         idempotencyKey: `dispute_resolve_${disputeId}`,
         entries: [
           { accountId: contract.escrowLedgerAccountId, debit: "0.0000", credit: contract.amount }, // Empty Escrow
