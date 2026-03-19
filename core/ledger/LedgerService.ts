@@ -1,8 +1,38 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, desc } from "drizzle-orm";
 import { getDb } from "../../server/db";
-import { ledgerAccounts, ledgerTransactions, ledgerEntries } from "../../drizzle/schema_ledger";\nimport { eventBus } from "../events/EventBus";\nimport { EventType } from "../events/EventTypes";
+import { ledgerAccounts, ledgerTransactions, ledgerEntries } from "../../drizzle/schema_ledger";
+import { eventBus } from "../events/EventBus";
+import { EventType } from "../events/EventTypes";
 
 export class LedgerService {
+  /**
+   * Calculates the current balance of an account from its ledger entries.
+   * Single source of truth is now the ledgerEntries table.
+   */
+  static async getAccountBalance(accountId: number): Promise<number> {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+
+    const [account] = await db
+      .select()
+      .from(ledgerAccounts)
+      .where(eq(ledgerAccounts.id, accountId));
+
+    if (!account) throw new Error(`Ledger Account ${accountId} not found`);
+
+    // Fetch the latest entry to get the balanceAfter snapshot
+    const [lastEntry] = await db
+      .select()
+      .from(ledgerEntries)
+      .where(eq(ledgerEntries.accountId, accountId))
+      .orderBy(desc(ledgerEntries.id))
+      .limit(1);
+
+    if (!lastEntry) return 0;
+
+    return parseFloat(lastEntry.balanceAfter);
+  }
+
   /**
    * Performs a double-entry transaction between two or more accounts.
    * Ensures that total Debits = total Credits.
@@ -28,7 +58,7 @@ export class LedgerService {
       throw new Error(`Inconsistent Ledger Entry: Total Debit (${totalDebit}) != Total Credit (${totalCredit})`);
     }
 
-    return await db.transaction(async (tx) => {
+    const transactionId = await db.transaction(async (tx) => {
       // 2. Create the Transaction Header
       const [txHeader] = await tx.insert(ledgerTransactions).values({
         description: params.description,
@@ -36,11 +66,11 @@ export class LedgerService {
         referenceId: params.referenceId,
       });
 
-      const transactionId = txHeader.insertId;
+      const txId = txHeader.insertId;
 
-      // 3. Process each entry and update account balances
+      // 3. Process each entry and calculate new balances
       for (const entry of params.entries) {
-        // Get current balance with a row lock for consistency
+        // Get account info and the last entry with a row lock for consistency
         const [account] = await tx
           .select()
           .from(ledgerAccounts)
@@ -49,13 +79,20 @@ export class LedgerService {
 
         if (!account) throw new Error(`Ledger Account ${entry.accountId} not found`);
 
-        const currentBalance = parseFloat(account.balance);
+        // Get the latest balance from ledgerEntries (Source of Truth)
+        const [lastEntry] = await tx
+          .select()
+          .from(ledgerEntries)
+          .where(eq(ledgerEntries.accountId, entry.accountId))
+          .orderBy(desc(ledgerEntries.id))
+          .limit(1)
+          .for("update");
+
+        const currentBalance = lastEntry ? parseFloat(lastEntry.balanceAfter) : 0;
         const debitAmount = parseFloat(entry.debit);
         const creditAmount = parseFloat(entry.credit);
 
         // Calculate new balance based on account type
-        // Assets/Expenses: Balance = Balance + Debit - Credit
-        // Liabilities/Equity/Revenue: Balance = Balance + Credit - Debit
         let newBalance: number;
         if (["asset", "expense"].includes(account.type)) {
           newBalance = currentBalance + debitAmount - creditAmount;
@@ -65,24 +102,18 @@ export class LedgerService {
 
         // 4. Record the Entry (Immutable Record)
         await tx.insert(ledgerEntries).values({
-          transactionId,
+          transactionId: txId,
           accountId: entry.accountId,
           debit: entry.debit,
           credit: entry.credit,
           balanceAfter: newBalance.toFixed(4),
         });
-
-        // 5. Update the Account Balance
-        await tx
-          .update(ledgerAccounts)
-          .set({ balance: newBalance.toFixed(4) })
-          .where(eq(ledgerAccounts.id, entry.accountId));
       }
 
-      return transactionId;
+      return txId;
     });
 
-    // 6. Publish Event: Transaction Recorded
+    // 5. Publish Event: Transaction Recorded
     await eventBus.publish(EventType.LEDGER_TRANSACTION_RECORDED, {
       transactionId,
       description: params.description,
@@ -117,12 +148,10 @@ export class LedgerService {
       userId,
       name,
       type,
-      balance: "0.0000",
     });
 
     return result.insertId;
   }
-}
 
   /**
    * Audit Trail: Verifies the integrity of the ledger.
@@ -150,6 +179,7 @@ export class LedgerService {
 
   /**
    * Snapshot Balance Check: Ensures account balance matches sum of its entries.
+   * IMPROVED: Now compares the latest snapshot (balanceAfter) with the calculated sum.
    */
   static async auditAccountBalance(accountId: number) {
     const db = await getDb();
@@ -166,14 +196,23 @@ export class LedgerService {
       .from(ledgerEntries)
       .where(eq(ledgerEntries.accountId, accountId));
 
-    const calculatedBalance = account.type === "asset" || account.type === "expense"
-      ? parseFloat(sumResult.totalDebit) - parseFloat(sumResult.totalCredit)
-      : parseFloat(sumResult.totalCredit) - parseFloat(sumResult.totalDebit);
+    const calculatedBalanceFromSum = account.type === "asset" || account.type === "expense"
+      ? (parseFloat(sumResult.totalDebit as string) || 0) - (parseFloat(sumResult.totalCredit as string) || 0)
+      : (parseFloat(sumResult.totalCredit as string) || 0) - (parseFloat(sumResult.totalDebit as string) || 0);
+
+    const [lastEntry] = await db
+      .select()
+      .from(ledgerEntries)
+      .where(eq(ledgerEntries.accountId, accountId))
+      .orderBy(desc(ledgerEntries.id))
+      .limit(1);
+
+    const snapshotBalance = lastEntry ? parseFloat(lastEntry.balanceAfter) : 0;
 
     return {
-      storedBalance: parseFloat(account.balance),
-      calculatedBalance,
-      isConsistent: Math.abs(parseFloat(account.balance) - calculatedBalance) < 0.0001,
+      snapshotBalance,
+      calculatedBalanceFromSum,
+      isConsistent: Math.abs(snapshotBalance - calculatedBalanceFromSum) < 0.0001,
     };
   }
 }

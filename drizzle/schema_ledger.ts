@@ -4,6 +4,8 @@ import { users } from "./schema";
 /**
  * Ledger Accounts Table
  * Represents various financial accounts (e.g., User Wallets, System Escrow, Revenue).
+ * IMPROVEMENT: Removed 'balance' field to avoid Dual Source of Truth.
+ * Balance is now dynamically calculated from ledgerEntries.
  */
 export const ledgerAccounts = mysqlTable("ledger_accounts", {
   id: int("id").autoincrement().primaryKey(),
@@ -11,7 +13,7 @@ export const ledgerAccounts = mysqlTable("ledger_accounts", {
   name: varchar("name", { length: 255 }).notNull(), // e.g., "Main Wallet", "Escrow Hold"
   type: varchar("type", { length: 50 }).notNull(), // "asset", "liability", "equity", "revenue", "expense"
   currency: varchar("currency", { length: 10 }).default("LYD").notNull(),
-  balance: decimal("balance", { precision: 20, scale: 4 }).default("0.0000").notNull(),
+  // balance field removed to ensure Ledger Entries are the single source of truth
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

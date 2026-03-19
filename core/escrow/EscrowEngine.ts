@@ -26,7 +26,8 @@ export class EscrowEngine {
       .limit(1);
 
     if (!buyerAccount) throw new Error("Buyer Ledger Account not found");
-    if (parseFloat(buyerAccount.balance) < parseFloat(params.amount)) {
+    const buyerBalance = await LedgerService.getAccountBalance(buyerAccount.id);
+    if (buyerBalance < parseFloat(params.amount)) {
       throw new Error("Insufficient funds in Buyer wallet");
     }
 
