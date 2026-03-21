@@ -4,7 +4,7 @@
  * Defines the contract for ledger operations without exposing implementation details.
  */
 export interface ILedgerService {
-  getAccountBalance(accountId: number): Promise<number>;
+  getAccountBalance(accountId: number, tx?: any): Promise<number>;
   
   recordTransaction(params: {
     description: string;
@@ -18,11 +18,12 @@ export interface ILedgerService {
       debit: string;
       credit: string;
     }[];
-  }): Promise<number>;
+  }, tx?: any): Promise<number>;
 
   createAccount(
     userId: number, 
     name: string, 
-    type: "asset" | "liability" | "revenue" | "expense"
+    type: "asset" | "liability" | "revenue" | "expense",
+    tx?: any
   ): Promise<number>;
 }
