@@ -61,3 +61,18 @@ export class ExternalServiceError extends AppError {
     super(`External service ${service} failed: ${message}`, "EXTERNAL_SERVICE_ERROR", 502);
   }
 }
+
+export class DatabaseError extends AppError {
+  constructor(message: string) {
+    super(message, "DATABASE_ERROR", 500);
+  }
+}
+
+export class TransactionError extends AppError {
+  constructor(message: string, originalError?: any) {
+    super(message, "TRANSACTION_ERROR", 500);
+    if (originalError) {
+      this.stack += `\nCaused by: ${originalError.stack}`;
+    }
+  }
+}

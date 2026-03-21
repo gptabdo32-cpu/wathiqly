@@ -1,4 +1,5 @@
 import { getDb } from "../../../apps/api/db";
+import { DatabaseError, TransactionError } from "../errors/errors";
 
 /**
  * TransactionManager
@@ -13,16 +14,23 @@ export class TransactionManager {
   static async run<T>(callback: (tx: any) => Promise<T>): Promise<T> {
     const db = await getDb();
     if (!db) {
-      throw new Error("Database connection not available for transaction");
+      throw new DatabaseError("Database connection not available for transaction");
     }
 
     try {
       return await db.transaction(async (tx) => {
-        return await callback(tx);
+        try {
+          return await callback(tx);
+        } catch (error: any) {
+          // If it's already an AppError, rethrow it to preserve context
+          if (error.code) throw error;
+          throw new TransactionError("Operation inside transaction failed", error);
+        }
       });
-    } catch (error) {
+    } catch (error: any) {
+      if (error.code) throw error;
       console.error("[TransactionManager] Transaction failed:", error);
-      throw error;
+      throw new TransactionError("Transaction execution failed", error);
     }
   }
 }
