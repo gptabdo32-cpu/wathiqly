@@ -2,6 +2,7 @@ import { getDb } from "../../server/db";
 import { outboxEvents } from "../../drizzle/schema_outbox";
 import { eq, and, lt, or, sql } from "drizzle-orm";
 import { BlockchainOrchestrator } from "./BlockchainOrchestrator";
+import { eventBus } from "../../core/events/EventBus";
 
 /**
  * OutboxWorker
@@ -71,6 +72,9 @@ export class OutboxWorker {
         if (!result.success) {
           throw new Error(result.error || "Blockchain operation failed");
         }
+
+        // Publish to internal EventBus for UI/Notifications after successful processing
+        await eventBus.publish(event.eventType, event.payload);
 
         // Mark as completed
         await db.update(outboxEvents).set({ status: "completed", processedAt: new Date(), error: null })
