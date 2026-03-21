@@ -54,7 +54,7 @@ import {
   services,
 } from "../drizzle/schema";
 import { createEscrowSchema } from "../../interface/api/schemas/createEscrow";
-import { EscrowEngine } from "../../modules/escrow/EscrowEngine";
+
 import { adminRouter } from "./core/admin";
 import { verificationRouter } from "./core/verification";
 import { paymentAdminRouter } from "./core/payment-admin";
@@ -86,7 +86,7 @@ export const appRouter = router({
   trust: trustRouter,
   admin: adminRouter,
   verification: verificationRouter,
-  escrowV2: escrowRouter,
+  escrow: escrowRouter,
   
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
@@ -252,25 +252,7 @@ export const appRouter = router({
           return { success: true, withdrawalId: result.insertId };
         });
       }),
-  }),
-
-  // ============ ESCROW OPERATIONS ============
-  escrow: router({
-    create: protectedProcedure
-      .input(createEscrowSchema)
-      .mutation(async ({ ctx, input }) => {
-        const escrowId = await EscrowEngine.lockFunds({
-          buyerId: ctx.user.id,
-          sellerId: input.sellerId,
-          amount: input.amount,
-          description: input.description,
-          sellerWalletAddress: input.sellerWalletAddress,
-        });
-
-        return { success: true, escrowId };
-      }),
-
-    getById: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
+  }),  getById: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
       return await getEscrowById(input.id);
     }),
 
