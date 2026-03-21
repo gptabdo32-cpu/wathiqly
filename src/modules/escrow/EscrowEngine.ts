@@ -25,8 +25,8 @@ export class EscrowEngine {
   }
 
   static async releaseFunds(escrowId: number) {
-    const { ledgerService, escrowRepo } = this.getDependencies();
-    return new ReleaseEscrow(ledgerService, escrowRepo).execute(escrowId);
+    const { paymentService, escrowRepo } = this.getDependencies();
+    return new ReleaseEscrow(paymentService, escrowRepo).execute(escrowId);
   }
 
   static async openDispute(escrowId: number, initiatorId: number, reason: string) {
@@ -35,7 +35,7 @@ export class EscrowEngine {
   }
 
   static async resolveDispute(disputeId: number, adminId: number, resolution: "buyer_refund" | "seller_payout") {
-    const { ledgerService, escrowRepo } = this.getDependencies();
-    return new ResolveDispute(ledgerService, escrowRepo).execute(disputeId, adminId, resolution);
+    const { paymentService, escrowRepo } = this.getDependencies();
+    return new ResolveDispute(paymentService, escrowRepo).execute(disputeId, adminId, resolution);
   }
 }

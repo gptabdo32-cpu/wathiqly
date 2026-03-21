@@ -1,6 +1,6 @@
 import { TransactionManager } from "../../../../core/db/TransactionManager";
-import { ILedgerService } from "../../../blockchain/domain/ILedgerService";
 import { IEscrowRepository } from "../../domain/IEscrowRepository";
+import { IPaymentService } from "../../domain/IPaymentService";
 
 export class OpenDispute {
   constructor(private escrowRepo: IEscrowRepository) {}
@@ -41,7 +41,7 @@ export class OpenDispute {
 
 export class ResolveDispute {
   constructor(
-    private ledgerService: ILedgerService,
+    private paymentService: IPaymentService,
     private escrowRepo: IEscrowRepository
   ) {}
 
@@ -68,20 +68,23 @@ export class ResolveDispute {
       await this.escrowRepo.update(escrow, tx);
 
       const props = escrow.getProps();
-      const targetAccountId = resolution === "buyer_refund" ? props.buyerLedgerAccountId : 2; // Simplified seller lookup
 
-      // 4. Ledger: Transfer funds
-      await this.ledgerService.recordTransaction({
-        description: `Resolving Dispute #${disputeId} via ${resolution}`,
-        referenceType: "dispute",
-        referenceId: disputeId,
-        escrowContractId: props.id,
-        idempotencyKey: `dispute_resolve_${disputeId}`,
-        entries: [
-          { accountId: props.escrowLedgerAccountId, debit: "0.0000", credit: props.amount },
-          { accountId: targetAccountId, debit: props.amount, credit: "0.0000" },
-        ],
-      }, tx);
+      // 4. Infrastructure Logic: Transfer funds via PaymentService
+      if (resolution === "buyer_refund") {
+        await this.paymentService.refundEscrowFunds({
+          escrowId: props.id!,
+          amount: props.amount,
+          escrowLedgerAccountId: props.escrowLedgerAccountId!,
+          buyerLedgerAccountId: props.buyerLedgerAccountId!,
+        }, tx);
+      } else {
+        await this.paymentService.releaseEscrowFunds({
+          escrowId: props.id!,
+          amount: props.amount,
+          escrowLedgerAccountId: props.escrowLedgerAccountId!,
+          sellerLedgerAccountId: 2, // Simplified seller lookup
+        }, tx);
+      }
 
       // 5. ATOMIC OUTBOX: Internal Notification
       await this.escrowRepo.saveOutboxEvent({

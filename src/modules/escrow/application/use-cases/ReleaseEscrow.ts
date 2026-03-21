@@ -1,10 +1,10 @@
 import { TransactionManager } from "../../../../core/db/TransactionManager";
-import { ILedgerService } from "../../../blockchain/domain/ILedgerService";
 import { IEscrowRepository } from "../../domain/IEscrowRepository";
+import { IPaymentService } from "../../domain/IPaymentService";
 
 export class ReleaseEscrow {
   constructor(
-    private ledgerService: ILedgerService,
+    private paymentService: IPaymentService,
     private escrowRepo: IEscrowRepository
   ) {}
 
@@ -22,17 +22,12 @@ export class ReleaseEscrow {
 
       const props = escrow.getProps();
 
-      // 4. Ledger: Transfer funds
-      await this.ledgerService.recordTransaction({
-        description: `Releasing funds for Escrow #${escrowId}`,
-        referenceType: "escrow",
-        referenceId: escrowId,
-        escrowContractId: escrowId,
-        idempotencyKey: `escrow_release_${escrowId}`,
-        entries: [
-          { accountId: props.escrowLedgerAccountId, debit: "0.0000", credit: props.amount },
-          { accountId: 2, debit: props.amount, credit: "0.0000" }, // Simplified seller account ID
-        ],
+      // 4. Infrastructure Logic: Release funds via PaymentService
+      await this.paymentService.releaseEscrowFunds({
+        escrowId,
+        amount: props.amount,
+        escrowLedgerAccountId: props.escrowLedgerAccountId!,
+        sellerLedgerAccountId: 2, // Simplified seller account ID
       }, tx);
 
       // 5. ATOMIC OUTBOX: Internal Notification
