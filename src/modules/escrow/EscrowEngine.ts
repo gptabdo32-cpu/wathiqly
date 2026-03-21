@@ -3,6 +3,7 @@ import { LedgerService } from "../blockchain/LedgerService";
 import { ReleaseEscrow } from "./application/use-cases/ReleaseEscrow";
 import { OpenDispute, ResolveDispute } from "./application/use-cases/DisputeUseCases";
 import { DrizzleEscrowRepository } from "./infrastructure/DrizzleEscrowRepository";
+import { PaymentService } from "./infrastructure/PaymentService";
 
 /**
  * EscrowEngine Facade
@@ -11,15 +12,16 @@ import { DrizzleEscrowRepository } from "./infrastructure/DrizzleEscrowRepositor
  */
 export class EscrowEngine {
   private static getDependencies() {
+    const ledgerService = new LedgerService();
     return {
-      ledgerService: new LedgerService(),
+      paymentService: new PaymentService(ledgerService),
       escrowRepo: new DrizzleEscrowRepository()
     };
   }
 
   static async lockFunds(params: CreateEscrowInput) {
-    const { ledgerService, escrowRepo } = this.getDependencies();
-    return new CreateEscrow(ledgerService, escrowRepo).execute(params);
+    const { paymentService, escrowRepo } = this.getDependencies();
+    return new CreateEscrow(paymentService, escrowRepo).execute(params);
   }
 
   static async releaseFunds(escrowId: number) {

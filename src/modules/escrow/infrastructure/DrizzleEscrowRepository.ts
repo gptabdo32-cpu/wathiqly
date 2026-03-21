@@ -55,6 +55,8 @@ export class DrizzleEscrowRepository implements IEscrowRepository {
       .set({
         status: props.status,
         blockchainStatus: props.blockchainStatus,
+        buyerLedgerAccountId: props.buyerLedgerAccountId,
+        escrowLedgerAccountId: props.escrowLedgerAccountId,
       })
       .where(eq(escrowContracts.id, props.id));
   }

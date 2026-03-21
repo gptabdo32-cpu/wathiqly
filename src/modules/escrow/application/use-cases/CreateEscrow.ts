@@ -1,7 +1,7 @@
 import { TransactionManager } from "../../../../core/db/TransactionManager";
-import { ILedgerService } from "../../../blockchain/domain/ILedgerService";
 import { IEscrowRepository } from "../../domain/IEscrowRepository";
 import { Escrow } from "../../domain/Escrow";
+import { IPaymentService } from "../../domain/IPaymentService";
 
 export interface CreateEscrowInput {
   buyerId: number;
@@ -13,7 +13,7 @@ export interface CreateEscrowInput {
 
 export class CreateEscrow {
   constructor(
-    private ledgerService: ILedgerService,
+    private paymentService: IPaymentService,
     private escrowRepo: IEscrowRepository
   ) {}
 
@@ -28,37 +28,27 @@ export class CreateEscrow {
     });
 
     return await TransactionManager.run(async (tx) => {
-      // 2. Infrastructure Logic: Create a System Escrow Account
-      const escrowAccountId = await this.ledgerService.createAccount(
-        0, // System user ID
-        `Escrow Hold for ${params.description}`,
-        "liability",
-        tx
-      );
+      // 2. Persistence: Initial record to get an ID
+      const escrowId = await this.escrowRepo.create(escrow, tx);
 
-      // 3. Update Domain Props with Infrastructure details
+      // 3. Infrastructure Logic: Lock funds via PaymentService
+      const { escrowLedgerAccountId } = await this.paymentService.lockEscrowFunds({
+        escrowId,
+        amount: params.amount,
+        description: params.description,
+      }, tx);
+
+      // 4. Update Domain Props with Infrastructure details
       const props = escrow.getProps();
       const updatedEscrow = Escrow.fromPersistence({
         ...props,
+        id: escrowId,
         buyerLedgerAccountId: 0, // Simplified for now
-        escrowLedgerAccountId: escrowAccountId,
+        escrowLedgerAccountId: escrowLedgerAccountId,
       });
 
-      // 4. Persistence: Record the Escrow Contract
-      const escrowId = await this.escrowRepo.create(updatedEscrow, tx);
-
-      // 5. Ledger: Move funds
-      await this.ledgerService.recordTransaction({
-        description: `Locking funds for Escrow #${escrowId}`,
-        referenceType: "escrow",
-        referenceId: escrowId,
-        escrowContractId: escrowId,
-        idempotencyKey: `escrow_lock_${escrowId}`,
-        entries: [
-          { accountId: 1, debit: "0.0000", credit: params.amount }, // Simplified account lookup
-          { accountId: escrowAccountId, debit: params.amount, credit: "0.0000" },
-        ],
-      }, tx);
+      // 5. Persistence: Update the Escrow Contract with ledger accounts
+      await this.escrowRepo.update(updatedEscrow, tx);
 
       // 6. ATOMIC OUTBOX: Save events inside the SAME transaction
       if (params.sellerWalletAddress) {
