@@ -35,23 +35,32 @@ export class EventBus {
   /**
    * Publish an event to all subscribers.
    */
-  public async publish<T>(event: string, data: T): Promise<void> {
+  /**
+   * Publish an event with full observability (Task 9)
+   */
+  public async publish<T extends { correlationId?: string; eventId?: string }>(event: string, data: T): Promise<void> {
     const handlers = this.handlers.get(event);
+    const correlationId = data.correlationId || "unknown";
+    
     if (!handlers || handlers.length === 0) {
-      console.log(`[EventBus] No local handlers for event: ${event}`);
+      console.log(`[EventBus][CID:${correlationId}] No local handlers for event: ${event}`);
       return;
     }
 
-    console.log(`[EventBus] Publishing event: ${event}`, data);
+    console.log(`[EventBus][CID:${correlationId}] Publishing event: ${event}`, {
+        eventId: data.eventId,
+        type: event,
+        timestamp: new Date().toISOString()
+    });
 
-    // Execute all handlers
-    // In a distributed system, this would be pushed to a Message Queue (Redis/RabbitMQ)
+    // Execute all handlers with tracing
     for (const handler of handlers) {
       try {
         await handler(data);
+        console.log(`[EventBus][CID:${correlationId}] Handler SUCCESS for ${event}`);
       } catch (error) {
-        console.error(`[EventBus] Error in handler for event ${event}:`, error);
-        // Implement retry logic or dead-letter queue here
+        console.error(`[EventBus][CID:${correlationId}] Handler ERROR for ${event}:`, error);
+        // In a real system, we'd log this to an audit trail table here
       }
     }
   }
