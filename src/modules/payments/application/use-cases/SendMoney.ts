@@ -1,6 +1,5 @@
 import { TransactionManager } from "../../../../core/db/TransactionManager";
 import { IPaymentRepository } from "../../domain/IPaymentRepository";
-import { Decimal } from "decimal.js";
 
 export interface SendMoneyInput {
   senderId: number;
@@ -14,30 +13,27 @@ export class SendMoney {
   constructor(private paymentRepo: IPaymentRepository) {}
 
   async execute(params: SendMoneyInput) {
-    const amount = new Decimal(params.amount);
-    
     return await TransactionManager.run(async (tx) => {
-      // 1. Lock sender wallet
+      // 1. Persistence: Get wallets
       const senderWallet = await this.paymentRepo.getWalletByUserId(params.senderId, tx);
-      if (!senderWallet || new Decimal(senderWallet.balance).lt(amount)) {
-        throw new Error("Insufficient funds.");
-      }
+      if (!senderWallet) throw new Error("Sender wallet not found.");
 
-      // 2. Lock receiver wallet
       const receiverWallet = await this.paymentRepo.getWalletByUserId(params.receiverId, tx);
-      if (!receiverWallet) {
-        throw new Error("Receiver wallet not found.");
-      }
+      if (!receiverWallet) throw new Error("Receiver wallet not found.");
 
-      const newSenderBalance = new Decimal(senderWallet.balance).minus(amount).toFixed(2);
-      const newReceiverBalance = new Decimal(receiverWallet.balance).plus(amount).toFixed(2);
+      // 2. Domain Logic: Perform transfer inside entities
+      const previousSenderBalance = senderWallet.debit(params.amount);
+      const previousReceiverBalance = receiverWallet.credit(params.amount);
+
+      // 3. Persistence: Update Wallets
+      await this.paymentRepo.updateWalletBalance(senderWallet, tx);
+      await this.paymentRepo.updateWalletBalance(receiverWallet, tx);
+
+      const senderProps = senderWallet.getProps();
+      const receiverProps = receiverWallet.getProps();
       const reference = `P2P-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
 
-      // 3. Update Wallets via Repository
-      await this.paymentRepo.updateWalletBalance(senderWallet.id, newSenderBalance, tx);
-      await this.paymentRepo.updateWalletBalance(receiverWallet.id, newReceiverBalance, tx);
-
-      // 4. Create P2P Record
+      // 4. Persistence: Create P2P Record
       const transferId = await this.paymentRepo.createP2PTransfer({
         senderId: params.senderId,
         receiverId: params.receiverId,
@@ -48,7 +44,7 @@ export class SendMoney {
         ipAddress: params.ipAddress,
       }, tx);
 
-      // 5. Create Transaction History for both
+      // 5. Persistence: Create Transaction History
       await this.paymentRepo.createTransactionHistory({
         userId: params.senderId,
         type: "transfer",
@@ -67,13 +63,13 @@ export class SendMoney {
         reference,
       }, tx);
 
-      // 6. Audit Logs
+      // 6. Persistence: Audit Logs
       await this.paymentRepo.createAuditLog({
         userId: params.senderId,
-        walletId: senderWallet.id,
+        walletId: senderProps.id,
         action: "p2p_sent",
-        previousBalance: senderWallet.balance,
-        newBalance: newSenderBalance,
+        previousBalance: previousSenderBalance,
+        newBalance: senderProps.balance,
         entityType: "p2pTransfer",
         entityId: transferId,
       }, tx);

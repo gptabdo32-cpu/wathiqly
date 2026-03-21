@@ -1,20 +1,31 @@
 import { eq } from "drizzle-orm";
 import { IPaymentRepository } from "../domain/IPaymentRepository";
+import { Wallet } from "../domain/Wallet";
 import { wallets, transactions } from "../../../drizzle/schema";
 import { p2pTransfers, walletAuditLogs } from "../../../drizzle/schema_wallet_id";
 import { outboxEvents } from "../../../drizzle/schema_outbox";
 import { getDb } from "../../../apps/api/db";
 
 export class DrizzlePaymentRepository implements IPaymentRepository {
-  async getWalletByUserId(userId: number, tx?: any): Promise<any> {
+  async getWalletByUserId(userId: number, tx?: any): Promise<Wallet | null> {
     const db = tx || (await getDb());
-    const [wallet] = await db.select().from(wallets).where(eq(wallets.userId, userId)).limit(1);
-    return wallet;
+    const [row] = await db.select().from(wallets).where(eq(wallets.userId, userId)).limit(1);
+    
+    if (!row) return null;
+    
+    return Wallet.fromPersistence({
+      id: row.id,
+      userId: row.userId,
+      balance: row.balance,
+      currency: row.currency || "USD",
+      status: (row.status as any) || "active",
+    });
   }
 
-  async updateWalletBalance(walletId: number, newBalance: string, tx?: any): Promise<void> {
+  async updateWalletBalance(wallet: Wallet, tx?: any): Promise<void> {
     const db = tx || (await getDb());
-    await db.update(wallets).set({ balance: newBalance }).where(eq(wallets.id, walletId));
+    const props = wallet.getProps();
+    await db.update(wallets).set({ balance: props.balance }).where(eq(wallets.id, props.id));
   }
 
   async createP2PTransfer(data: any, tx?: any): Promise<number> {

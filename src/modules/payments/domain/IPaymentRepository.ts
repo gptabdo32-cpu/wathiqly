@@ -1,7 +1,9 @@
+import { Wallet } from "./Wallet";
+
 export interface IPaymentRepository {
-  getWalletByUserId(userId: number, tx?: any): Promise<any>;
+  getWalletByUserId(userId: number, tx?: any): Promise<Wallet | null>;
   
-  updateWalletBalance(walletId: number, newBalance: string, tx?: any): Promise<void>;
+  updateWalletBalance(wallet: Wallet, tx?: any): Promise<void>;
   
   createP2PTransfer(data: {
     senderId: number;
