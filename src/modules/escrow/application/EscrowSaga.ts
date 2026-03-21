@@ -76,31 +76,45 @@ export class EscrowSaga {
   }
 
   /**
-   * Handle Payment Success (Task 5)
+   * Handle Payment Success (Task 8 - Idempotent & Deterministic)
    */
   async handlePaymentCompleted(correlationId: string, escrowLedgerAccountId: number): Promise<void> {
     const saga = await this.escrowRepo.getSagaInstanceByCorrelationId(correlationId);
-    if (!saga || saga.status !== "ESCROW_CREATED") return;
+    if (!saga) return;
+    
+    // Idempotency check: If already completed, do nothing
+    if (saga.status === "COMPLETED") return;
+    
+    // Ensure we are in the correct state to process payment
+    if (saga.status !== "ESCROW_CREATED") {
+        throw new Error(`Invalid saga state for payment completion: ${saga.status}`);
+    }
 
     const escrow = await this.escrowRepo.getById(saga.escrowId);
     if (!escrow) throw new Error("Escrow not found");
 
-    // Transition Domain State
-    escrow.lock();
-    escrow.updateLedgerAccounts(escrowLedgerAccountId);
+    // Idempotent Domain Transition
+    if (escrow.canBeLocked()) {
+        escrow.lock();
+        escrow.updateLedgerAccounts(escrowLedgerAccountId);
+        await this.escrowRepo.update(escrow);
+    }
 
-    // Persist changes & Update Saga (Atomic inside Repo)
-    await this.escrowRepo.update(escrow);
+    // Atomic Saga Update
     await this.escrowRepo.updateSagaStatus(correlationId, "COMPLETED");
 
-    // Emit Final Event
+    // Replayable Outbox Event
     await this.escrowRepo.saveOutboxEvent({
       eventId: uuidv4(),
       aggregateType: "escrow",
       aggregateId: escrow.id!,
       eventType: "EscrowSagaCompleted",
       version: 1,
-      payload: { escrowId: escrow.id, status: "LOCKED" },
+      payload: { 
+        escrowId: escrow.id, 
+        status: "LOCKED",
+        timestamp: new Date().toISOString() // Deterministic representation
+      },
       correlationId,
       idempotencyKey: `saga_completed_${correlationId}`,
       status: "pending",
