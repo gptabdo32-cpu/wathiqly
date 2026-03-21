@@ -89,4 +89,18 @@ export class DrizzleEscrowRepository implements IEscrowRepository {
     const db = tx || (await getDb());
     await db.insert(outboxEvents).values(event);
   }
+
+  async updateEscrowBlockchainStatus(escrowId: number, blockchainStatus: "none" | "pending" | "confirmed" | "failed", lastTxHash: string, tx?: any): Promise<void> {
+    const db = tx || (await getDb());
+    await db.update(escrowContracts)
+      .set({ blockchainStatus, lastTxHash })
+      .where(eq(escrowContracts.id, escrowId));
+  }
+
+  async updateDisputeBlockchainStatus(disputeId: number, blockchainTxHash: string, tx?: any): Promise<void> {
+    const db = tx || (await getDb());
+    await db.update(disputes)
+      .set({ blockchainTxHash })
+      .where(eq(disputes.id, disputeId));
+  }
 }

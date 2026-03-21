@@ -6,6 +6,8 @@ export interface IEscrowRepository {
   getById(id: number, tx?: any): Promise<Escrow | null>;
   
   update(escrow: Escrow, tx?: any): Promise<void>;
+  updateEscrowBlockchainStatus(escrowId: number, blockchainStatus: "none" | "pending" | "confirmed" | "failed", lastTxHash: string, tx?: any): Promise<void>;
+  updateDisputeBlockchainStatus(disputeId: number, blockchainTxHash: string, tx?: any): Promise<void>;
   
   createDispute(data: {
     escrowId: number;
