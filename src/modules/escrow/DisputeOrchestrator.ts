@@ -1,6 +1,7 @@
 import { OpenDispute, ResolveDispute } from "./application/use-cases/DisputeUseCases";
 import { LedgerService } from "../blockchain/LedgerService";
 import { DrizzleEscrowRepository } from "./infrastructure/DrizzleEscrowRepository";
+import { PaymentService } from "./infrastructure/PaymentService";
 
 /**
  * DisputeOrchestrator Facade
@@ -8,21 +9,20 @@ import { DrizzleEscrowRepository } from "./infrastructure/DrizzleEscrowRepositor
  */
 export class DisputeOrchestrator {
   private static getDependencies() {
+    const ledgerService = new LedgerService();
     return {
-      ledgerService: new LedgerService(),
+      paymentService: new PaymentService(ledgerService),
       escrowRepo: new DrizzleEscrowRepository()
     };
   }
 
   static async openDispute(escrowId: number, initiatorId: number, reason: string) {
     const { escrowRepo } = this.getDependencies();
-    // @ts-ignore - This will be fixed once we inject dependencies properly
     return new OpenDispute(escrowRepo).execute(escrowId, initiatorId, reason);
   }
 
   static async resolveDispute(disputeId: number, adminId: number, resolution: "buyer_refund" | "seller_payout") {
-    const { ledgerService, escrowRepo } = this.getDependencies();
-    // @ts-ignore - This will be fixed once we inject dependencies properly
-    return new ResolveDispute(ledgerService, escrowRepo).execute(disputeId, adminId, resolution);
+    const { paymentService, escrowRepo } = this.getDependencies();
+    return new ResolveDispute(paymentService, escrowRepo).execute(disputeId, adminId, resolution);
   }
 }
