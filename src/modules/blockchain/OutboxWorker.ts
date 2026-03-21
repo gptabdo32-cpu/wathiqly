@@ -2,6 +2,8 @@ import { getDb } from "../../server/db";
 import { outboxEvents } from "../../drizzle/schema_outbox";
 import { eq, and, lt, or, sql } from "drizzle-orm";
 import { BlockchainOrchestrator } from "./BlockchainOrchestrator";
+import { IBlockchainOrchestrator } from "./domain/IBlockchainOrchestrator";
+import { DrizzleEscrowRepository } from "../escrow/infrastructure/DrizzleEscrowRepository";
 import { eventBus } from "../../core/events/EventBus";
 
 /**
@@ -10,11 +12,13 @@ import { eventBus } from "../../core/events/EventBus";
  * Implements retry logic for failed events.
  */
 export class OutboxWorker {
+  private blockchainOrchestrator: IBlockchainOrchestrator;
   private intervalId: NodeJS.Timeout | null = null;
   private readonly MAX_RETRIES = 5;
   private readonly RETRY_DELAY_MS = 5 * 60 * 1000; // 5 minutes
 
   constructor(private pollIntervalMs: number = 10 * 1000) { // Poll every 10 seconds
+    this.blockchainOrchestrator = new BlockchainOrchestrator(new DrizzleEscrowRepository());
     console.log(`[OutboxWorker] Initialized with poll interval: ${this.pollIntervalMs / 1000} seconds`);
   }
 
@@ -67,7 +71,7 @@ export class OutboxWorker {
         await db.update(outboxEvents).set({ status: "processing", lastAttemptAt: new Date(), retries: event.retries + 1 })
           .where(eq(outboxEvents.id, event.id));
 
-        const result = await BlockchainOrchestrator.processOutboxEvent(event); // Process the event
+        const result = await this.blockchainOrchestrator.processOutboxEvent(event); // Process the event
 
         if (!result.success) {
           throw new Error(result.error || "Blockchain operation failed");

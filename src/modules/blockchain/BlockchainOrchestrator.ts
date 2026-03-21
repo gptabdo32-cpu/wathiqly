@@ -1,6 +1,6 @@
 import { IEscrowRepository } from "../escrow/domain/IEscrowRepository";
+
 import { outboxEvents } from "../../drizzle/schema_outbox";
-import { DrizzleEscrowRepository } from "../escrow/infrastructure/DrizzleEscrowRepository";
 import { eq } from "drizzle-orm";
 import { blockchainService } from "./blockchain";
 // import { eventBus } from "../../core/events/EventBus";
@@ -14,9 +14,13 @@ import { disputes } from "../../drizzle/schema_escrow_engine";
  * It performs the actual blockchain interaction and updates the escrow/dispute contracts.
  * It does NOT update the outbox event status; that is handled by the OutboxWorker.
  */
-export class BlockchainOrchestrator {
-  static async processOutboxEvent(event: typeof outboxEvents.$inferSelect): Promise<{ success: boolean; txHash?: string; error?: string }> {
-    const escrowRepo: IEscrowRepository = new DrizzleEscrowRepository();
+import { IBlockchainOrchestrator } from "./domain/IBlockchainOrchestrator";
+
+export class BlockchainOrchestrator implements IBlockchainOrchestrator {
+  constructor(private escrowRepo: IEscrowRepository) {}
+
+  async processOutboxEvent(event: typeof outboxEvents.$inferSelect): Promise<{ success: boolean; txHash?: string; error?: string }> {
+
 
     try {
       switch (event.eventType) {
@@ -30,7 +34,7 @@ export class BlockchainOrchestrator {
             amountInWei
           );
 
-          await escrowRepo.updateEscrowBlockchainStatus(payload.escrowId, "synced", txHash);
+          await this.escrowRepo.updateEscrowBlockchainStatus(payload.escrowId, "synced", txHash);
             
           console.log(`[BlockchainOrchestrator] Escrow #${payload.escrowId} synced to blockchain: ${txHash}`);
           
@@ -42,7 +46,7 @@ export class BlockchainOrchestrator {
         case "EscrowReleaseRequested": {
           const payload = event.payload as { escrowId: number; onChainId: number; milestoneId: number; };
           const txHash = await blockchainService.releaseMilestone(payload.onChainId, payload.milestoneId);
-          await escrowRepo.updateEscrowBlockchainStatus(payload.escrowId, "confirmed", txHash);
+          await this.escrowRepo.updateEscrowBlockchainStatus(payload.escrowId, "confirmed", txHash);
           console.log(`[BlockchainOrchestrator] On-chain Escrow #${payload.onChainId} released. Tx: ${txHash}`);
           
           // Dispatch internal event - REMOVED: Events must originate from Outbox only
@@ -53,7 +57,7 @@ export class BlockchainOrchestrator {
         case "DisputeResolutionRequested": {
           const payload = event.payload as { disputeId: number; onChainId: number; milestoneId: number; releaseToSeller: boolean; };
           const txHash = await blockchainService.resolveDispute(payload.onChainId, payload.milestoneId, payload.releaseToSeller);
-          await escrowRepo.updateDisputeBlockchainStatus(payload.disputeId, txHash);
+          await this.escrowRepo.updateDisputeBlockchainStatus(payload.disputeId, txHash);
           console.log(`[BlockchainOrchestrator] On-chain Dispute #${payload.onChainId} resolved. Tx: ${txHash}`);
           return { success: true, txHash };
         }
