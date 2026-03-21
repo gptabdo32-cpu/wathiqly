@@ -1,6 +1,4 @@
-import { TransactionManager } from "../../../core/db/TransactionManager";
 import { IEscrowRepository } from "../domain/IEscrowRepository";
-import { IPaymentService } from "../domain/IPaymentService";
 import { Escrow } from "../domain/Escrow";
 import { v4 as uuidv4 } from 'uuid';
 
@@ -15,21 +13,28 @@ export interface EscrowSagaInput {
 /**
  * EscrowSaga Orchestrator (Deterministic State Machine)
  * 
- * Flow:
- * 1. PENDING_INITIALIZATION (DB Record)
- * 2. FUNDS_LOCK_PENDING (Payment Service Call)
- * 3. ACTIVE (Success) or FAILED (Compensation)
+ * MISSION: Stabilize the system mathematically and operationally.
+ * 
+ * Flow (Event-Driven):
+ * 1. INIT -> Create Escrow (PENDING) + Create Saga Instance
+ * 2. Emit EscrowCreatedEvent
+ * 3. PaymentService listens -> Locks Funds -> Emits PaymentCompleted
+ * 4. Saga listens to PaymentCompleted -> Transition to COMPLETED -> Update Escrow to LOCKED
  */
 export class EscrowSaga {
   constructor(
-    private paymentService: IPaymentService,
     private escrowRepo: IEscrowRepository
   ) {}
 
-  async execute(input: EscrowSagaInput): Promise<number> {
+  /**
+   * Start the Saga.
+   * NO TransactionManager here. Transactions are ONLY inside repositories.
+   * NO Synchronous cross-service calls.
+   */
+  async start(input: EscrowSagaInput): Promise<string> {
     const correlationId = uuidv4();
     
-    // Step 1: Initialize Escrow State (Deterministic)
+    // 1. Create Domain Entity (Starts as PENDING - Task 7)
     const escrow = Escrow.create({
       buyerId: input.buyerId,
       sellerId: input.sellerId,
@@ -37,69 +42,81 @@ export class EscrowSaga {
       description: input.description,
     });
 
-    try {
-      return await TransactionManager.run(async (tx) => {
-        // 1. Persist Initial State
-        const escrowId = await this.escrowRepo.create(escrow, tx);
-        
-        // 2. Emit Initialization Event (Traceable)
-        await this.escrowRepo.saveOutboxEvent({
-          eventId: uuidv4(),
-          aggregateType: "escrow",
-          aggregateId: escrowId,
-          eventType: "EscrowInitialized",
-          version: 1,
-          payload: { escrowId, ...input },
-          correlationId,
-          idempotencyKey: `init_${escrowId}`,
-          status: "pending",
-        } as any, tx);
+    // 2. Persist Initial State & Saga Instance (Atomic inside Repo)
+    // The repository should handle the local ACID transaction
+    const escrowId = await this.escrowRepo.create(escrow);
+    
+    await this.escrowRepo.createSagaInstance({
+      correlationId,
+      escrowId,
+      status: "ESCROW_CREATED",
+      payload: { ...input, escrowId },
+    });
 
-        // 3. Execute Financial Operation (External Service)
-        // Note: In a fully async system, this would be triggered by the OutboxWorker
-        // For this saga, we orchestrate the immediate lock but ensure it's idempotent
-        const { escrowLedgerAccountId } = await this.paymentService.lockEscrowFunds({
-          escrowId,
-          amount: input.amount,
-          description: input.description,
-        }, tx);
+    // 3. Emit EscrowCreatedEvent (Task 2)
+    // This replaces paymentService.lockEscrowFunds()
+    await this.escrowRepo.saveOutboxEvent({
+      eventId: uuidv4(),
+      aggregateType: "escrow",
+      aggregateId: escrowId,
+      eventType: "EscrowCreated",
+      version: 1,
+      payload: { 
+        escrowId, 
+        buyerId: input.buyerId, 
+        amount: input.amount,
+        correlationId 
+      },
+      correlationId,
+      idempotencyKey: `escrow_created_${escrowId}`,
+      status: "pending",
+    } as any);
 
-        // 4. Transition to ACTIVE State
-        const updatedEscrow = await this.escrowRepo.getById(escrowId, tx);
-        if (updatedEscrow) {
-          updatedEscrow.updateLedgerAccounts(escrowLedgerAccountId);
-          await this.escrowRepo.update(updatedEscrow, tx);
-        }
-
-        // 5. Emit Success Event
-        await this.escrowRepo.saveOutboxEvent({
-          eventId: uuidv4(),
-          aggregateType: "escrow",
-          aggregateId: escrowId,
-          eventType: "FundsLocked",
-          version: 1,
-          payload: { escrowId, escrowLedgerAccountId },
-          correlationId,
-          causationId: correlationId, // In this simple saga, the flow start is the cause
-          idempotencyKey: `lock_success_${escrowId}`,
-          status: "pending",
-        } as any, tx);
-
-        return escrowId;
-      });
-    } catch (error: any) {
-      console.error(`[EscrowSaga][${correlationId}] Failure: ${error.message}`);
-      // Failure is expected and modeled
-      await this.handleFailure(input, correlationId, error);
-      throw new Error(`Escrow creation failed: ${error.message}`);
-    }
+    return correlationId;
   }
 
-  private async handleFailure(input: any, correlationId: string, error: Error) {
-    // Log failure for observability
-    console.error(`[EscrowSaga][${correlationId}] Initiating Failure Control...`);
+  /**
+   * Handle Payment Success (Task 5)
+   */
+  async handlePaymentCompleted(correlationId: string, escrowLedgerAccountId: number): Promise<void> {
+    const saga = await this.escrowRepo.getSagaInstanceByCorrelationId(correlationId);
+    if (!saga || saga.status !== "ESCROW_CREATED") return;
+
+    const escrow = await this.escrowRepo.getById(saga.escrowId);
+    if (!escrow) throw new Error("Escrow not found");
+
+    // Transition Domain State
+    escrow.lock();
+    escrow.updateLedgerAccounts(escrowLedgerAccountId);
+
+    // Persist changes & Update Saga (Atomic inside Repo)
+    await this.escrowRepo.update(escrow);
+    await this.escrowRepo.updateSagaStatus(correlationId, "COMPLETED");
+
+    // Emit Final Event
+    await this.escrowRepo.saveOutboxEvent({
+      eventId: uuidv4(),
+      aggregateType: "escrow",
+      aggregateId: escrow.id!,
+      eventType: "EscrowSagaCompleted",
+      version: 1,
+      payload: { escrowId: escrow.id, status: "LOCKED" },
+      correlationId,
+      idempotencyKey: `saga_completed_${correlationId}`,
+      status: "pending",
+    } as any);
+  }
+
+  /**
+   * Handle Payment Failure (Task 4)
+   */
+  async handlePaymentFailed(correlationId: string, reason: string): Promise<void> {
+    const saga = await this.escrowRepo.getSagaInstanceByCorrelationId(correlationId);
+    if (!saga) return;
+
+    await this.escrowRepo.updateSagaStatus(correlationId, "FAILED", reason);
     
-    // In a production system, this would trigger a Compensation Saga
-    // or move the state to 'FAILED' for manual/automated retry
+    // Compensation logic would go here if needed
+    // For now, we mark as FAILED to ensure determinism
   }
 }

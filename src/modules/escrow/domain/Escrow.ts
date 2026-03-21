@@ -1,4 +1,4 @@
-export type EscrowStatus = "pending" | "locked" | "released" | "disputed" | "refunded" | "cancelled";
+export type EscrowStatus = "PENDING" | "LOCKED" | "RELEASED" | "DISPUTED" | "REFUNDED" | "CANCELLED";
 
 export interface EscrowProps {
   id?: number;
@@ -33,38 +33,45 @@ export class Escrow {
 
     return new Escrow({
       ...props,
-      status: "locked",
+      status: "PENDING",
       blockchainStatus: "none",
     });
   }
 
   public canBeReleased(): boolean {
-    return this.props.status === "locked";
+    return this.props.status === "LOCKED";
   }
 
   public canBeDisputed(): boolean {
-    return this.props.status === "locked";
+    return this.props.status === "LOCKED";
+  }
+
+  public lock(): void {
+    if (this.props.status !== "PENDING") {
+      throw new Error(`Cannot lock escrow in status: ${this.props.status}`);
+    }
+    this.props.status = "LOCKED";
   }
 
   public release(): void {
     if (!this.canBeReleased()) {
       throw new Error(`Cannot release escrow in status: ${this.props.status}`);
     }
-    this.props.status = "released";
+    this.props.status = "RELEASED";
   }
 
   public dispute(): void {
     if (!this.canBeDisputed()) {
       throw new Error(`Cannot dispute escrow in status: ${this.props.status}`);
     }
-    this.props.status = "disputed";
+    this.props.status = "DISPUTED";
   }
 
   public refund(): void {
-    if (this.props.status !== "disputed") {
+    if (this.props.status !== "DISPUTED") {
       throw new Error(`Cannot refund escrow in status: ${this.props.status}`);
     }
-    this.props.status = "refunded";
+    this.props.status = "REFUNDED";
   }
 
   public setBlockchainStatus(status: "none" | "pending" | "confirmed" | "failed"): void {

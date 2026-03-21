@@ -27,4 +27,9 @@ export interface IEscrowRepository {
     payload: any;
     status: string;
   }, tx?: any): Promise<void>;
+
+  // Saga Instance Methods
+  createSagaInstance(instance: any, tx?: any): Promise<void>;
+  getSagaInstanceByCorrelationId(correlationId: string, tx?: any): Promise<any>;
+  updateSagaStatus(correlationId: string, status: string, error?: string, tx?: any): Promise<void>;
 }

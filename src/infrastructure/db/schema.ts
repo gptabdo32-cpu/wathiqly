@@ -111,15 +111,13 @@ export const escrows = mysqlTable("escrows", {
   commissionAmount: decimal("commissionAmount", { precision: 15, scale: 2 }).notNull(),
   commissionPaidBy: mysqlEnum("commissionPaidBy", ["buyer", "seller", "split"]).default("seller").notNull(),
   status: mysqlEnum("status", [
-    "draft",
-    "pending_verification",
-    "funded",
-    "delivered",
-    "completed",
-    "disputed",
-    "cancelled",
-    "refunded"
-  ]).default("draft").notNull(),
+    "PENDING",
+    "LOCKED",
+    "RELEASED",
+    "DISPUTED",
+    "REFUNDED",
+    "CANCELLED"
+  ]).default("PENDING").notNull(),
   
   // Dispute fields
   disputeReason: text("disputeReason"),
@@ -257,6 +255,22 @@ export const reviews = mysqlTable("reviews", {
 });
 
 export type InsertReview = typeof reviews.$inferInsert;
+
+// ============ SAGA STATE MACHINE ============
+
+export const escrowSagaInstances = mysqlTable("escrow_saga_instances", {
+  id: int("id").autoincrement().primaryKey(),
+  correlationId: varchar("correlationId", { length: 64 }).notNull().unique(),
+  escrowId: int("escrowId").notNull(),
+  status: mysqlEnum("status", ["INIT", "ESCROW_CREATED", "FUNDS_PENDING", "COMPLETED", "FAILED"]).default("INIT").notNull(),
+  payload: json("payload").notNull(),
+  error: text("error"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type EscrowSagaInstance = typeof escrowSagaInstances.$inferSelect;
+export type InsertEscrowSagaInstance = typeof escrowSagaInstances.$inferInsert;erInsert;
 
 export const trustedSellerSubscriptions = mysqlTable("trustedSellerSubscriptions", {
   id: int("id").autoincrement().primaryKey(),

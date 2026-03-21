@@ -13,7 +13,7 @@ export class EscrowMapper {
       sellerId: raw.sellerId,
       amount: raw.amount,
       description: raw.description,
-      status: raw.status,
+      status: (raw.status as string).toUpperCase() as any,
       buyerLedgerAccountId: raw.buyerLedgerAccountId,
       escrowLedgerAccountId: raw.escrowLedgerAccountId,
       blockchainStatus: raw.blockchainStatus,
