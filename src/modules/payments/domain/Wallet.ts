@@ -8,33 +8,32 @@ export interface WalletProps {
   status: "active" | "frozen" | "closed";
 }
 
+/**
+ * Wallet Domain Entity
+ * 100% Pure Domain: No persistence awareness.
+ */
 export class Wallet {
   private constructor(private props: WalletProps) {}
-
-  public static fromPersistence(props: WalletProps): Wallet {
-    return new Wallet(props);
-  }
-
-  public getProps(): WalletProps {
-    return { ...this.props };
-  }
 
   public hasSufficientFunds(amount: string): boolean {
     return new Decimal(this.props.balance).gte(new Decimal(amount));
   }
 
-  public debit(amount: string): string {
+  public debit(amount: string): void {
     if (!this.hasSufficientFunds(amount)) {
       throw new Error("Insufficient funds");
     }
-    const previousBalance = this.props.balance;
     this.props.balance = new Decimal(this.props.balance).minus(new Decimal(amount)).toFixed(2);
-    return previousBalance;
   }
 
-  public credit(amount: string): string {
-    const previousBalance = this.props.balance;
+  public credit(amount: string): void {
     this.props.balance = new Decimal(this.props.balance).plus(new Decimal(amount)).toFixed(2);
-    return previousBalance;
   }
+
+  // Domain state accessors (readonly)
+  public get id() { return this.props.id; }
+  public get userId() { return this.props.userId; }
+  public get balance() { return this.props.balance; }
+  public get currency() { return this.props.currency; }
+  public get status() { return this.props.status; }
 }

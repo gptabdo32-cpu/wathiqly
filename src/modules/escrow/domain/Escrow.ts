@@ -12,10 +12,14 @@ export interface EscrowProps {
   blockchainStatus?: "none" | "pending" | "confirmed" | "failed";
 }
 
+/**
+ * Escrow Domain Entity
+ * 100% Pure Domain: No persistence awareness, only business rules.
+ */
 export class Escrow {
   private constructor(private props: EscrowProps) {}
 
-  public static create(props: Omit<EscrowProps, "status" | "blockchainStatus"> & { sellerWalletAddress?: string }): Escrow {
+  public static create(props: Omit<EscrowProps, "status" | "blockchainStatus">): Escrow {
     // Business Rule: Amount validation
     const amountNum = parseFloat(props.amount);
     if (isNaN(amountNum) || amountNum <= 0) {
@@ -29,25 +33,9 @@ export class Escrow {
 
     return new Escrow({
       ...props,
-      status: "locked", // Initial status for new escrow
+      status: "locked",
       blockchainStatus: "none",
     });
-  }
-
-  /**
-   * Internal factory for infrastructure mapping.
-   * This should only be used by Mappers in the Infrastructure layer.
-   * @internal
-   */
-  public static _createFromPersistence(props: EscrowProps): Escrow {
-    return new Escrow(props);
-  }
-
-  /**
-   * @internal
-   */
-  public _getInternalProps(): EscrowProps {
-    return { ...this.props };
   }
 
   public canBeReleased(): boolean {
@@ -79,7 +67,25 @@ export class Escrow {
     this.props.status = "refunded";
   }
 
-  public setBlockchainStatus(status: "none" | "pending" | "confirmed" | "failed", txHash?: string): void {
+  public setBlockchainStatus(status: "none" | "pending" | "confirmed" | "failed"): void {
     this.props.blockchainStatus = status;
   }
+
+  public updateLedgerAccounts(escrowLedgerId: number, buyerLedgerId?: number): void {
+    this.props.escrowLedgerAccountId = escrowLedgerId;
+    if (buyerLedgerId) {
+      this.props.buyerLedgerAccountId = buyerLedgerId;
+    }
+  }
+
+  // Domain state accessors (readonly)
+  public get id() { return this.props.id; }
+  public get buyerId() { return this.props.buyerId; }
+  public get sellerId() { return this.props.sellerId; }
+  public get amount() { return this.props.amount; }
+  public get description() { return this.props.description; }
+  public get status() { return this.props.status; }
+  public get blockchainStatus() { return this.props.blockchainStatus; }
+  public get escrowLedgerAccountId() { return this.props.escrowLedgerAccountId; }
+  public get buyerLedgerAccountId() { return this.props.buyerLedgerAccountId; }
 }

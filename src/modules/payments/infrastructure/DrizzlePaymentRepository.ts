@@ -5,6 +5,7 @@ import { wallets, transactions } from "../../../drizzle/schema";
 import { p2pTransfers, walletAuditLogs } from "../../../drizzle/schema_wallet_id";
 import { outboxEvents } from "../../../drizzle/schema_outbox";
 import { getDb } from "../../../apps/api/db";
+import { WalletMapper } from "./WalletMapper";
 
 export class DrizzlePaymentRepository implements IPaymentRepository {
   async getWalletByUserId(userId: number, tx?: any): Promise<Wallet | null> {
@@ -13,19 +14,12 @@ export class DrizzlePaymentRepository implements IPaymentRepository {
     
     if (!row) return null;
     
-    return Wallet.fromPersistence({
-      id: row.id,
-      userId: row.userId,
-      balance: row.balance,
-      currency: row.currency || "USD",
-      status: (row.status as any) || "active",
-    });
+    return WalletMapper.toDomain(row);
   }
 
   async updateWalletBalance(wallet: Wallet, tx?: any): Promise<void> {
     const db = tx || (await getDb());
-    const props = wallet.getProps();
-    await db.update(wallets).set({ balance: props.balance }).where(eq(wallets.id, props.id));
+    await db.update(wallets).set({ balance: wallet.balance }).where(eq(wallets.id, wallet.id));
   }
 
   async createP2PTransfer(data: any, tx?: any): Promise<number> {

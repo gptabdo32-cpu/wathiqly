@@ -1,5 +1,10 @@
 import { Escrow, EscrowProps } from "../domain/Escrow";
 
+/**
+ * Escrow Infrastructure Mapper
+ * Handles mapping between Domain and Persistence.
+ * This is the only place allowed to use 'any' casting for domain reconstruction.
+ */
 export class EscrowMapper {
   public static toDomain(raw: any): Escrow {
     const props: EscrowProps = {
@@ -13,21 +18,23 @@ export class EscrowMapper {
       escrowLedgerAccountId: raw.escrowLedgerAccountId,
       blockchainStatus: raw.blockchainStatus,
     };
-    return Escrow._createFromPersistence(props);
+    
+    // Reconstruction via casting - bypassing private constructor for infrastructure only
+    return new (Escrow as any)(props);
   }
 
   public static toPersistence(escrow: Escrow): any {
-    const props = (escrow as any)._getInternalProps();
+    // Accessing domain properties via getters
     return {
-      id: props.id,
-      buyerId: props.buyerId,
-      sellerId: props.sellerId,
-      amount: props.amount,
-      description: props.description,
-      status: props.status,
-      buyerLedgerAccountId: props.buyerLedgerAccountId,
-      escrowLedgerAccountId: props.escrowLedgerAccountId,
-      blockchainStatus: props.blockchainStatus,
+      id: escrow.id,
+      buyerId: escrow.buyerId,
+      sellerId: escrow.sellerId,
+      amount: escrow.amount,
+      description: escrow.description,
+      status: escrow.status,
+      buyerLedgerAccountId: escrow.buyerLedgerAccountId,
+      escrowLedgerAccountId: escrow.escrowLedgerAccountId,
+      blockchainStatus: escrow.blockchainStatus,
     };
   }
 }

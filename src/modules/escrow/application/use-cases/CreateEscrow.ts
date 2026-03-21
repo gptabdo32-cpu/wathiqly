@@ -2,7 +2,6 @@ import { TransactionManager } from "../../../../core/db/TransactionManager";
 import { IEscrowRepository } from "../../domain/IEscrowRepository";
 import { Escrow } from "../../domain/Escrow";
 import { IPaymentService } from "../../domain/IPaymentService";
-import { crypto } from "../../../../core/utils/utils"; // Assuming crypto helper exists
 
 export interface CreateEscrowInput {
   buyerId: number;
@@ -19,37 +18,37 @@ export class CreateEscrow {
   ) {}
 
   async execute(params: CreateEscrowInput) {
+    // 1. Domain Logic: Create the entity
     const escrow = Escrow.create({
       buyerId: params.buyerId,
       sellerId: params.sellerId,
       amount: params.amount,
       description: params.description,
-      sellerWalletAddress: params.sellerWalletAddress,
     });
 
     return await TransactionManager.run(async (tx) => {
+      // 2. Persistence: Initial record to get an ID
       const escrowId = await this.escrowRepo.create(escrow, tx);
 
+      // 3. Infrastructure Logic: Lock funds via PaymentService
       const { escrowLedgerAccountId } = await this.paymentService.lockEscrowFunds({
         escrowId,
         amount: params.amount,
         description: params.description,
       }, tx);
 
-      const props = (escrow as any)._getInternalProps();
-      const updatedEscrow = Escrow._createFromPersistence({
-        ...props,
-        id: escrowId,
-        buyerLedgerAccountId: 0, 
-        escrowLedgerAccountId: escrowLedgerAccountId,
-      });
+      // 4. Update Domain State (Pure Domain Logic)
+      // Note: In a stricter Clean Architecture, we might reload from DB or use a domain service
+      // but updating the entity state is acceptable if the entity supports it.
+      escrow.updateLedgerAccounts(escrowLedgerAccountId);
 
-      await this.escrowRepo.update(updatedEscrow, tx);
+      // 5. Persistence: Update the Escrow Contract with ledger accounts
+      await this.escrowRepo.update(escrow, tx);
 
-      // ATOMIC OUTBOX: Save events with eventId and idempotencyKey
+      // 6. ATOMIC OUTBOX: Save events inside the SAME transaction
       if (params.sellerWalletAddress) {
         await this.escrowRepo.saveOutboxEvent({
-          eventId: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          eventId: `evt_bc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           aggregateType: "escrow",
           aggregateId: escrowId,
           eventType: "EscrowCreateRequested",
@@ -59,13 +58,13 @@ export class CreateEscrow {
             sellerWalletAddress: params.sellerWalletAddress,
             amount: params.amount,
           },
-          idempotencyKey: `escrow_create_req_${escrowId}`,
+          idempotencyKey: `escrow_bc_create_${escrowId}`,
           status: "pending",
         }, tx);
       }
 
       await this.escrowRepo.saveOutboxEvent({
-        eventId: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        eventId: `evt_fnd_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         aggregateType: "escrow",
         aggregateId: escrowId,
         eventType: "EscrowFundsLocked",
@@ -76,7 +75,7 @@ export class CreateEscrow {
           sellerId: params.sellerId,
           amount: params.amount,
         },
-        idempotencyKey: `escrow_funds_locked_${escrowId}`,
+        idempotencyKey: `escrow_fnd_lock_${escrowId}`,
         status: "pending",
       }, tx);
 
