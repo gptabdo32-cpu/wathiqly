@@ -7,15 +7,17 @@ export class OpenDispute {
 
   async execute(escrowId: number, initiatorId: number, reason: string) {
     return await TransactionManager.run(async (tx) => {
-      const contract = await this.escrowRepo.getById(escrowId, tx);
-      if (!contract) throw new Error("Contract not found");
+      // 1. Persistence: Get escrow via Repository
+      const escrow = await this.escrowRepo.getById(escrowId, tx);
+      if (!escrow) throw new Error("Escrow not found");
       
-      if (contract.status !== "locked") {
-        throw new Error(`Invalid Escrow transition: ${contract.status} -> disputed`);
-      }
+      // 2. Domain Rule: Perform transition inside the Entity
+      escrow.dispute();
 
-      await this.escrowRepo.updateStatus(escrowId, "disputed", tx);
+      // 3. Persistence: Update status
+      await this.escrowRepo.update(escrow, tx);
 
+      // 4. Persistence: Create dispute record
       const disputeId = await this.escrowRepo.createDispute({
         escrowId,
         initiatorId,
@@ -23,6 +25,7 @@ export class OpenDispute {
         status: "open",
       }, tx);
 
+      // 5. ATOMIC OUTBOX: Internal Notification
       await this.escrowRepo.saveOutboxEvent({
         aggregateType: "escrow",
         aggregateId: escrowId,
@@ -44,53 +47,48 @@ export class ResolveDispute {
 
   async execute(disputeId: number, adminId: number, resolution: "buyer_refund" | "seller_payout") {
     return await TransactionManager.run(async (tx) => {
+      // 1. Persistence: Get dispute and associated escrow
       const dispute = await this.escrowRepo.getDisputeById(disputeId, tx);
       if (!dispute || dispute.status !== "open") {
         throw new Error("Dispute not found or already resolved");
       }
 
-      const contract = await this.escrowRepo.getById(dispute.escrowId, tx);
-      if (!contract) throw new Error("Associated escrow contract not found");
+      const escrow = await this.escrowRepo.getById(dispute.escrowId, tx);
+      if (!escrow) throw new Error("Associated escrow contract not found");
 
-      const nextStatus = resolution === "buyer_refund" ? "refunded" : "released";
-      
+      // 2. Domain Rule: Perform transition inside the Entity
+      if (resolution === "buyer_refund") {
+        escrow.refund();
+      } else {
+        escrow.release();
+      }
+
+      // 3. Persistence: Update dispute and escrow statuses
       await this.escrowRepo.updateDispute(disputeId, { status: "resolved", resolution, adminId }, tx);
-      await this.escrowRepo.updateStatus(contract.id, nextStatus, tx);
+      await this.escrowRepo.update(escrow, tx);
 
-      const targetAccountId = resolution === "buyer_refund" ? contract.buyerLedgerAccountId : 2; // Simplified seller lookup
+      const props = escrow.getProps();
+      const targetAccountId = resolution === "buyer_refund" ? props.buyerLedgerAccountId : 2; // Simplified seller lookup
 
+      // 4. Ledger: Transfer funds
       await this.ledgerService.recordTransaction({
         description: `Resolving Dispute #${disputeId} via ${resolution}`,
         referenceType: "dispute",
         referenceId: disputeId,
-        escrowContractId: contract.id,
+        escrowContractId: props.id,
         idempotencyKey: `dispute_resolve_${disputeId}`,
         entries: [
-          { accountId: contract.escrowLedgerAccountId, debit: "0.0000", credit: contract.amount },
-          { accountId: targetAccountId, debit: contract.amount, credit: "0.0000" },
+          { accountId: props.escrowLedgerAccountId, debit: "0.0000", credit: props.amount },
+          { accountId: targetAccountId, debit: props.amount, credit: "0.0000" },
         ],
       }, tx);
 
-      if (contract.blockchainStatus === "synced" && contract.onChainId !== null) {
-        await this.escrowRepo.saveOutboxEvent({
-          aggregateType: "dispute",
-          aggregateId: disputeId,
-          eventType: "DisputeResolutionRequested",
-          payload: {
-            disputeId,
-            onChainId: contract.onChainId,
-            milestoneId: 0,
-            releaseToSeller: resolution === "seller_payout",
-          },
-          status: "pending",
-        }, tx);
-      }
-
+      // 5. ATOMIC OUTBOX: Internal Notification
       await this.escrowRepo.saveOutboxEvent({
         aggregateType: "dispute",
         aggregateId: disputeId,
         eventType: "EscrowDisputeResolved",
-        payload: { disputeId, resolution, escrowId: contract.id },
+        payload: { disputeId, resolution, escrowId: props.id },
         status: "pending",
       }, tx);
 

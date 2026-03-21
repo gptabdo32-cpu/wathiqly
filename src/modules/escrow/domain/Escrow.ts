@@ -62,4 +62,11 @@ export class Escrow {
     }
     this.props.status = "disputed";
   }
+
+  public refund(): void {
+    if (this.props.status !== "disputed") {
+      throw new Error(`Cannot refund escrow in status: ${this.props.status}`);
+    }
+    this.props.status = "refunded";
+  }
 }

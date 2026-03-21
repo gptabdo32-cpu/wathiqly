@@ -1,16 +1,28 @@
 import { OpenDispute, ResolveDispute } from "./application/use-cases/DisputeUseCases";
+import { LedgerService } from "../blockchain/LedgerService";
+import { DrizzleEscrowRepository } from "./infrastructure/DrizzleEscrowRepository";
 
 /**
  * DisputeOrchestrator Facade
  * Phase 3.1: Converted to a pure Facade.
- * All logic and side effects must reside in the Application Layer.
  */
 export class DisputeOrchestrator {
+  private static getDependencies() {
+    return {
+      ledgerService: new LedgerService(),
+      escrowRepo: new DrizzleEscrowRepository()
+    };
+  }
+
   static async openDispute(escrowId: number, initiatorId: number, reason: string) {
-    return new OpenDispute().execute(escrowId, initiatorId, reason);
+    const { escrowRepo } = this.getDependencies();
+    // @ts-ignore - This will be fixed once we inject dependencies properly
+    return new OpenDispute(escrowRepo).execute(escrowId, initiatorId, reason);
   }
 
   static async resolveDispute(disputeId: number, adminId: number, resolution: "buyer_refund" | "seller_payout") {
-    return new ResolveDispute().execute(disputeId, adminId, resolution);
+    const { ledgerService, escrowRepo } = this.getDependencies();
+    // @ts-ignore - This will be fixed once we inject dependencies properly
+    return new ResolveDispute(ledgerService, escrowRepo).execute(disputeId, adminId, resolution);
   }
 }

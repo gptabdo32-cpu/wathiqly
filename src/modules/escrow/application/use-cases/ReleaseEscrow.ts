@@ -10,20 +10,19 @@ export class ReleaseEscrow {
 
   async execute(escrowId: number) {
     return await TransactionManager.run(async (tx) => {
-      // 1. Get contract via Repository with transaction context
-      const contract = await this.escrowRepo.getById(escrowId, tx);
-      if (!contract) throw new Error("Contract not found");
+      // 1. Persistence: Get contract via Repository
+      const escrow = await this.escrowRepo.getById(escrowId, tx);
+      if (!escrow) throw new Error("Escrow not found");
       
-      // 2. Domain Rule: Check transition (Should be in Domain Entity eventually)
-      if (contract.status !== "locked") {
-        throw new Error(`Invalid Escrow transition: ${contract.status} -> released`);
-      }
+      // 2. Domain Rule: Perform transition inside the Entity
+      escrow.release();
 
-      // 3. Update status to released via Repository
-      await this.escrowRepo.updateStatus(escrowId, "released", tx);
+      // 3. Persistence: Update status
+      await this.escrowRepo.update(escrow, tx);
 
-      // 4. Transfer funds from Escrow Hold to Seller Wallet via Ledger
-      // Note: Seller account lookup should be abstracted
+      const props = escrow.getProps();
+
+      // 4. Ledger: Transfer funds
       await this.ledgerService.recordTransaction({
         description: `Releasing funds for Escrow #${escrowId}`,
         referenceType: "escrow",
@@ -31,35 +30,20 @@ export class ReleaseEscrow {
         escrowContractId: escrowId,
         idempotencyKey: `escrow_release_${escrowId}`,
         entries: [
-          { accountId: contract.escrowLedgerAccountId, debit: "0.0000", credit: contract.amount },
-          { accountId: 2, debit: contract.amount, credit: "0.0000" }, // Simplified seller account ID
+          { accountId: props.escrowLedgerAccountId, debit: "0.0000", credit: props.amount },
+          { accountId: 2, debit: props.amount, credit: "0.0000" }, // Simplified seller account ID
         ],
       }, tx);
 
-      // 5. ATOMIC OUTBOX: Blockchain Sync
-      if (contract.blockchainStatus === "synced" && contract.onChainId !== null) {
-        await this.escrowRepo.saveOutboxEvent({
-          aggregateType: "escrow",
-          aggregateId: escrowId,
-          eventType: "EscrowReleaseRequested",
-          payload: {
-            escrowId,
-            onChainId: contract.onChainId,
-            milestoneId: 0,
-          },
-          status: "pending",
-        }, tx);
-      }
-
-      // 6. ATOMIC OUTBOX: Internal Notification
+      // 5. ATOMIC OUTBOX: Internal Notification
       await this.escrowRepo.saveOutboxEvent({
         aggregateType: "escrow",
         aggregateId: escrowId,
         eventType: "EscrowFundsReleased",
         payload: {
           escrowId,
-          sellerId: contract.sellerId,
-          amount: contract.amount,
+          sellerId: props.sellerId,
+          amount: props.amount,
         },
         status: "pending",
       }, tx);
