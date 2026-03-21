@@ -1,13 +1,14 @@
 import { PaymentOrchestrator } from "./PaymentOrchestrator";
 import { DisputeOrchestrator } from "./DisputeOrchestrator";
-import { BlockchainOrchestrator } from "../ledger/BlockchainOrchestrator";
-import { eventBus } from "../events/EventBus";
-import { EventType } from "../events/EventTypes";
+import { BlockchainOrchestrator } from "../blockchain/BlockchainOrchestrator";
 
 /**
  * Orchestration Layer
  * Centralizes complex business processes that span multiple services (Escrow, Ledger, Blockchain).
  * Acts as a facade, delegating to more specific orchestrators.
+ * 
+ * ATOMICITY RULE: All events must originate from the Outbox. 
+ * Direct eventBus publishing is forbidden here to ensure deterministic financial consistency.
  */
 export class OrchestrationLayer {
   static async initiateEscrow(params: {
@@ -17,17 +18,11 @@ export class OrchestrationLayer {
     description: string;
     sellerWalletAddress?: string;
   }) {
-    console.log(`[OrchestrationLayer] Initiating Escrow for Buyer ${params.buyerId} to Seller ${params.sellerId}`);
     return PaymentOrchestrator.initiateEscrow(params);
   }
 
   static async completeEscrow(escrowId: number) {
-    console.log(`[OrchestrationLayer] Completing Escrow #${escrowId}`);
-    const success = await PaymentOrchestrator.completeEscrow(escrowId);
-    if (success) {
-      await eventBus.publish(EventType.ESCROW_FUNDS_RELEASED, { escrowId });
-    }
-    return success;
+    return PaymentOrchestrator.completeEscrow(escrowId);
   }
 
   static async handleDisputeResolution(
@@ -35,17 +30,10 @@ export class OrchestrationLayer {
     adminId: number,
     resolution: "buyer_refund" | "seller_payout"
   ) {
-    console.log(`[OrchestrationLayer] Resolving Dispute #${disputeId} with ${resolution}`);
-    const success = await DisputeOrchestrator.resolveDispute(disputeId, adminId, resolution);
-    if (success) {
-      await eventBus.publish(EventType.ESCROW_DISPUTE_RESOLVED, { disputeId, resolution });
-    }
-    return success;
+    return DisputeOrchestrator.resolveDispute(disputeId, adminId, resolution);
   }
 
-  // A method to trigger processing of outbox events, typically called by a background worker
-  static async processBlockchainOutboxEvent(eventId: number) {
-    console.log(`[OrchestrationLayer] Processing blockchain outbox event #${eventId}`);
-    return BlockchainOrchestrator.processOutboxEvent(eventId);
+  static async processBlockchainOutboxEvent(event: any) {
+    return BlockchainOrchestrator.processOutboxEvent(event);
   }
 }
