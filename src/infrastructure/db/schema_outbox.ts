@@ -13,6 +13,8 @@ export const outboxEvents = mysqlTable("outbox_events", {
   eventType: varchar("eventType", { length: 100 }).notNull(), // e.g., "EscrowLocked"
   version: int("version").default(1).notNull(), // Event schema version
   payload: json("payload").notNull(), // JSON payload containing event data
+  correlationId: varchar("correlationId", { length: 64 }).notNull(), // Links all events in a single business flow
+  causationId: varchar("causationId", { length: 64 }), // The ID of the event or command that caused THIS event
   idempotencyKey: varchar("idempotencyKey", { length: 128 }).notNull().unique(), // Prevents duplicate processing
   status: varchar("status", { length: 50 }).default("pending").notNull(), // "pending", "processing", "completed", "failed", "dead_letter"
   createdAt: timestamp("createdAt").defaultNow().notNull(),
