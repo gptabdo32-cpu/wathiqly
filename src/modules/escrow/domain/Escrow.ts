@@ -38,6 +38,10 @@ export class Escrow {
     });
   }
 
+  public canBeLocked(): boolean {
+    return this.props.status === "PENDING";
+  }
+
   public canBeReleased(): boolean {
     return this.props.status === "LOCKED";
   }
@@ -47,7 +51,7 @@ export class Escrow {
   }
 
   public lock(): void {
-    if (this.props.status !== "PENDING") {
+    if (!this.canBeLocked()) {
       throw new Error(`Cannot lock escrow in status: ${this.props.status}`);
     }
     this.props.status = "LOCKED";
