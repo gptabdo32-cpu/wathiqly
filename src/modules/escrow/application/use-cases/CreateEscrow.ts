@@ -3,7 +3,7 @@ import { getDb } from "../../../../server/db";
 import { escrowContracts } from "../../../../drizzle/schema_escrow_engine";
 import { LedgerService } from "../../../ledger/LedgerService";
 import { ledgerAccounts } from "../../../../drizzle/schema_ledger";
-import { eventBus } from "../../../events/EventBus";
+import { publishToQueue } from "../../../events/EventQueue";
 import { EventType } from "../../../events/EventTypes";
 import { outboxEvents } from "../../../../drizzle/schema_outbox";
 
@@ -88,7 +88,7 @@ export class CreateEscrow {
     }
 
     // 6. Publish Event: Funds Locked
-    await eventBus.publish(EventType.ESCROW_FUNDS_LOCKED, {
+    await publishToQueue(EventType.ESCROW_FUNDS_LOCKED, {
       escrowId,
       buyerId: params.buyerId,
       sellerId: params.sellerId,
