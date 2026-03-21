@@ -1,6 +1,6 @@
 import { TransactionManager } from "../../../../core/db/TransactionManager";
-import { ILedgerService } from "../../../blockchain/domain/ILedgerService";
 import { IEscrowRepository } from "../../domain/IEscrowRepository";
+import { IPaymentService } from "../../domain/IPaymentService";
 
 export interface CreateEscrowInput {
   buyerId: number;
@@ -12,7 +12,7 @@ export interface CreateEscrowInput {
 
 export class CreateEscrow {
   constructor(
-    private ledgerService: ILedgerService,
+    private paymentService: IPaymentService,
     private escrowRepo: IEscrowRepository
   ) {}
 
@@ -23,19 +23,11 @@ export class CreateEscrow {
       throw new Error("Invalid escrow amount");
     }
 
-    // 2. Initial Checks (Should ideally use a Domain Service)
-    // Note: In a fully clean architecture, finding the buyerAccount would also go through a Repository
-    // For this refactor, we focus on the Escrow and Transactional consistency.
-
     return await TransactionManager.run(async (tx) => {
-      // 3. Create a System Escrow Account for this contract
-      const escrowAccountId = await this.ledgerService.createAccount(
-        0, // System user ID
-        `Escrow Hold for ${params.description}`,
-        "liability"
-      );
+      // 2. Create a System Escrow Account for this contract
+      const escrowAccountId = await this.paymentService.createEscrowAccount(params.description, tx);
 
-      // 4. Record the Escrow Contract via Repository
+      // 3. Record the Escrow Contract via Repository
       const escrowId = await this.escrowRepo.create({
         buyerId: params.buyerId,
         sellerId: params.sellerId,
@@ -47,20 +39,10 @@ export class CreateEscrow {
         blockchainStatus: params.sellerWalletAddress ? "pending" : "none",
       }, tx);
 
-      // 5. Move funds via Ledger (Ensuring LedgerService supports 'tx' context)
-      await this.ledgerService.recordTransaction({
-        description: `Locking funds for Escrow #${escrowId}`,
-        referenceType: "escrow",
-        referenceId: escrowId,
-        escrowContractId: escrowId,
-        idempotencyKey: `escrow_lock_${escrowId}`,
-        entries: [
-          { accountId: 1, debit: "0.0000", credit: params.amount }, // Simplified account lookup
-          { accountId: escrowAccountId, debit: params.amount, credit: "0.0000" },
-        ],
-      }, tx);
+      // 4. Move funds via PaymentService
+      await this.paymentService.lockEscrowFunds(escrowId, params.amount, escrowAccountId, tx);
 
-      // 6. ATOMIC OUTBOX: Save event inside the SAME transaction
+      // 5. ATOMIC OUTBOX: Save event inside the SAME transaction
       if (params.sellerWalletAddress) {
         await this.escrowRepo.saveOutboxEvent({
           aggregateType: "escrow",
@@ -75,7 +57,7 @@ export class CreateEscrow {
         }, tx);
       }
 
-      // 7. Internal Event (Outbox for deterministic internal processing)
+      // 6. Internal Event (Outbox for deterministic internal processing)
       await this.escrowRepo.saveOutboxEvent({
         aggregateType: "escrow",
         aggregateId: escrowId,
