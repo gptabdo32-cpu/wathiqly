@@ -2,6 +2,7 @@ import { CreateEscrow, CreateEscrowInput } from "./application/use-cases/CreateE
 import { LedgerService } from "../blockchain/LedgerService";
 import { ReleaseEscrow } from "./application/use-cases/ReleaseEscrow";
 import { OpenDispute, ResolveDispute } from "./application/use-cases/DisputeUseCases";
+import { DrizzleEscrowRepository } from "./infrastructure/DrizzleEscrowRepository";
 
 /**
  * EscrowEngine Facade
@@ -9,20 +10,30 @@ import { OpenDispute, ResolveDispute } from "./application/use-cases/DisputeUseC
  * All business logic, DB calls, and conditions must reside in use cases (Application Layer).
  */
 export class EscrowEngine {
+  private static getDependencies() {
+    return {
+      ledgerService: new LedgerService(),
+      escrowRepo: new DrizzleEscrowRepository()
+    };
+  }
+
   static async lockFunds(params: CreateEscrowInput) {
-    const ledgerService = new LedgerService();
-    return new CreateEscrow(ledgerService).execute(params);
+    const { ledgerService, escrowRepo } = this.getDependencies();
+    return new CreateEscrow(ledgerService, escrowRepo).execute(params);
   }
 
   static async releaseFunds(escrowId: number) {
-    return new ReleaseEscrow().execute(escrowId);
+    const { ledgerService, escrowRepo } = this.getDependencies();
+    return new ReleaseEscrow(ledgerService, escrowRepo).execute(escrowId);
   }
 
   static async openDispute(escrowId: number, initiatorId: number, reason: string) {
-    return new OpenDispute().execute(escrowId, initiatorId, reason);
+    const { escrowRepo } = this.getDependencies();
+    return new OpenDispute(escrowRepo).execute(escrowId, initiatorId, reason);
   }
 
   static async resolveDispute(disputeId: number, adminId: number, resolution: "buyer_refund" | "seller_payout") {
-    return new ResolveDispute().execute(disputeId, adminId, resolution);
+    const { ledgerService, escrowRepo } = this.getDependencies();
+    return new ResolveDispute(ledgerService, escrowRepo).execute(disputeId, adminId, resolution);
   }
 }
