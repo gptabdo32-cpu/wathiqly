@@ -36,8 +36,8 @@ export class CreateEscrow {
         description: params.description,
       }, tx);
 
-      const props = escrow.getProps();
-      const updatedEscrow = Escrow._reconstitute({
+      const props = (escrow as any)._getInternalProps();
+      const updatedEscrow = Escrow._createFromPersistence({
         ...props,
         id: escrowId,
         buyerLedgerAccountId: 0, 

@@ -37,12 +37,16 @@ export class Escrow {
   /**
    * Internal factory for infrastructure mapping.
    * This should only be used by Mappers in the Infrastructure layer.
+   * @internal
    */
-  public static _reconstitute(props: EscrowProps): Escrow {
+  public static _createFromPersistence(props: EscrowProps): Escrow {
     return new Escrow(props);
   }
 
-  public getProps(): EscrowProps {
+  /**
+   * @internal
+   */
+  public _getInternalProps(): EscrowProps {
     return { ...this.props };
   }
 

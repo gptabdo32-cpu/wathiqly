@@ -47,8 +47,8 @@ export class EscrowSaga {
         }, tx);
 
         // Step 3: Update Escrow with Ledger Info
-        const updatedEscrow = Escrow._reconstitute({
-          ...escrow.getProps(),
+        const updatedEscrow = Escrow._createFromPersistence({
+          ...(escrow as any)._getInternalProps(),
           id: id,
           escrowLedgerAccountId,
         });
@@ -88,7 +88,7 @@ export class EscrowSaga {
       if (!escrow) return;
 
       // Logic to refund funds if they were locked
-      const props = escrow.getProps();
+      const props = (escrow as any)._getInternalProps();
       if (props.escrowLedgerAccountId) {
         await this.paymentService.refundEscrowFunds({
           escrowId,

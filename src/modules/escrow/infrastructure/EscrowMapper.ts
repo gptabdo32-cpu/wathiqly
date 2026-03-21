@@ -13,11 +13,11 @@ export class EscrowMapper {
       escrowLedgerAccountId: raw.escrowLedgerAccountId,
       blockchainStatus: raw.blockchainStatus,
     };
-    return Escrow._reconstitute(props);
+    return Escrow._createFromPersistence(props);
   }
 
   public static toPersistence(escrow: Escrow): any {
-    const props = escrow.getProps();
+    const props = (escrow as any)._getInternalProps();
     return {
       id: props.id,
       buyerId: props.buyerId,

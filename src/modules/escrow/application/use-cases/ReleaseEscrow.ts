@@ -20,7 +20,7 @@ export class ReleaseEscrow {
       // 3. Persistence: Update status
       await this.escrowRepo.update(escrow, tx);
 
-      const props = escrow.getProps();
+      const props = (escrow as any)._getInternalProps();
 
       // 4. Infrastructure Logic: Release funds via PaymentService
       await this.paymentService.releaseEscrowFunds({
