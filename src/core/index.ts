@@ -8,7 +8,8 @@ import cors from "cors";
 import { corsOptions } from "./security";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
-import { serveStatic, setupVite } from "./vite";\nimport { initializeSubscribers } from "./events/Subscribers";
+import { serveStatic, setupVite } from "./vite";
+import { initializeSubscribers } from "./events/Subscribers";
 import { generalLimiter, authLimiter, helmetConfig, mongoSanitizeMiddleware, xssCleanMiddleware, hppMiddleware, securityHeadersMiddleware } from "./security";
 import multer from "multer";
 import { storagePut } from "../storage";
@@ -33,7 +34,10 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
   throw new Error(`No available port found starting from ${startPort}`);
 }
 
-async function startServer() {\n  // Initialize Smart Event Bus System\n  initializeSubscribers();\n
+async function startServer() {
+  // Initialize Smart Event Bus System
+  initializeSubscribers();
+
   const app = express();
   const server = createServer(app);
 
@@ -44,6 +48,11 @@ async function startServer() {\n  // Initialize Smart Event Bus System\n  initia
   app.use(hppMiddleware);
   app.use(securityHeadersMiddleware);
   app.use(cors(corsOptions));
+
+  // Health check endpoint for Kubernetes
+  app.get("/health", (req, res) => {
+    res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+  });
 
   // Configure body parser with controlled size limits
   app.use(express.json({ limit: "20mb" }));
