@@ -1,43 +1,27 @@
-# تقرير انتهاكات الهيكلية وخطة التحسين (Wathiqly)
+# تقرير انتهاكات الهيكلية وخطة التحسين (Wathiqly) - تحديث
 
-## 1. قائمة الانتهاكات المحددة (Violations)
+## 1. حالة التنفيذ (Execution Status)
 
-| الملف | الانتهاك | السبب |
+| المرحلة | الحالة | الملاحظات |
 | :--- | :--- | :--- |
-| `src/modules/escrow/EscrowEngine.ts` | **Dual Orchestration Layer** | يعمل كـ Facade مكرر فوق Use Cases. |
-| `src/modules/escrow/OrchestrationLayer.ts` | **Dual Orchestration Layer** | طبقة إضافية غير ضرورية تكسر Clean Architecture. |
-| `src/modules/escrow/PaymentOrchestrator.ts` | **Dual Orchestration Layer** | تكرار لمنطق الـ Use Cases في طبقة Orchestration. |
-| `src/modules/escrow/domain/Escrow.ts` | **Domain Purity Violation** | وجود `fromPersistence` داخل الـ Domain Entity. |
-| `src/modules/escrow/EscrowEngine.ts` | **Direct Instantiation** | استخدام `new Service()` داخل الكلاس (خرق DI). |
-| `src/modules/escrow/infrastructure/DrizzleEscrowRepository.ts` | **Mapping Responsibility** | الـ Repository يعتمد على `fromPersistence` الموجود في الـ Domain. |
-| `src/modules/blockchain/OutboxWorker.ts` | **Incomplete Outbox Pattern** | غياب Idempotency، Dead-letter queue، و Schema validation. |
-| `src/modules/escrow/application/use-cases/CreateEscrow.ts` | **Direct Dependency** | الاعتماد على `TransactionManager` بشكل مباشر بدلاً من Interface (اختياري ولكن يفضل التجريد). |
+| **Phase 1: Orchestration Cleanup** | ✅ مكتمل | تم حذف `EscrowEngine`, `OrchestrationLayer`, `PaymentOrchestrator`, `DisputeOrchestrator`. |
+| **Phase 2: Domain Purity & Mapping** | ✅ مكتمل | تم إزالة `fromPersistence` من `Escrow.ts` ونقل المنطق إلى `EscrowMapper`. |
+| **Phase 3: Dependency Injection (DI)** | ✅ مكتمل | تم إنشاء `Container.ts` وتحديث الـ API Routers لاستخدامه. |
+| **Phase 4: Transaction Safety** | ⏳ قيد التنفيذ | تم التأكد من استخدام `TransactionManager` في جميع الـ Use Cases الحالية. |
+| **Phase 5: Outbox & Event System** | 📅 مجدولة | سيتم تحديث العقود والـ Worker في الخطوة القادمة. |
 
-## 2. خطوات إعادة الهيكلة (Refactoring Steps)
+## 2. الانتهاكات التي تم إصلاحها (Fixed Violations)
 
-1. **Phase 1: Orchestration Cleanup**
-   - حذف `EscrowEngine.ts`, `OrchestrationLayer.ts`, `PaymentOrchestrator.ts`.
-   - توجيه الـ API Routers للتعامل مباشرة مع الـ Use Cases.
+- [x] **Dual Orchestration Layer**: تم توحيد المنطق في الـ Use Cases.
+- [x] **Domain Purity Violation**: الـ Domain أصبح نقياً من تفاصيل الـ Persistence.
+- [x] **Direct Instantiation**: تم استبدالها بـ DI Container.
 
-2. **Phase 2: Domain Purity & Mapping**
-   - إزالة `fromPersistence` من `Escrow.ts`.
-   - إنشاء `EscrowMapper` في الـ Infrastructure للتحويل بين DB و Domain.
+## 3. الخطوات القادمة (Next Steps)
 
-3. **Phase 3: Dependency Injection (DI)**
-   - تعديل الـ Use Cases لاستقبال التبعيات عبر الـ Constructor فقط.
-   - إعداد Container بسيط أو Factory لإدارة الـ Dependencies.
-
-4. **Phase 4: Outbox & Event System Upgrade**
-   - تحديث جدول الـ Outbox ليشمل `eventId`, `version`, `idempotencyKey`.
-   - تنفيذ Background Worker متطور مع DLQ و Retry logic.
-   - إنشاء `src/contracts/events/` لتوحيد العقود.
-
-5. **Phase 5: Saga Implementation**
-   - تنفيذ `EscrowSaga` لإدارة التدفق المالي المعقد (Create -> Lock -> Emit -> Confirm/Rollback).
-
-6. **Phase 6: Security & Performance**
-   - إضافة Zod validation في طبقة الـ Application.
-   - نقل عمليات الـ Blockchain إلى Async Workers بالكامل.
-
----
-**النتيجة المستهدفة:** نظام موزع بمعايير Fintech، قابل للتوسع، وضمان تناسق البيانات (Eventual Consistency) عبر Saga و Outbox.
+1. **تطوير نظام الـ Outbox**:
+   - إضافة `eventId`, `version`, `idempotencyKey` لجدول الأحداث.
+   - تنفيذ Schema Validation للأحداث.
+2. **تنفيذ الـ Saga Orchestrator**:
+   - إدارة العمليات المالية الموزعة لضمان الـ Consistency.
+3. **الأمان والأداء**:
+   - نقل عمليات الـ Blockchain إلى Async Workers.
