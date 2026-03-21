@@ -1,6 +1,6 @@
-import { Order, OrderStatus } from "../../domain/entities/order"
-import { transitionOrder } from "../../domain/order-state-machine"
-import { Shipment } from "../../domain/entities/shipment"
+import { Order, OrderStatus } from "../../modules/escrow/domain/order"
+import { transitionOrder } from "../../modules/escrow/domain/order-state-machine"
+import { Shipment } from "../../modules/escrow/domain/shipment"
 
 export class ShipmentService {
 

@@ -53,12 +53,15 @@ import {
   vehicles,
   services,
 } from "../drizzle/schema";
+import { createEscrowSchema } from "../../interface/api/schemas/createEscrow";
+import { EscrowEngine } from "../../modules/escrow/EscrowEngine";
 import { adminRouter } from "./core/admin";
 import { verificationRouter } from "./core/verification";
 import { paymentAdminRouter } from "./core/payment-admin";
 import { walletIdEnhancedRouter } from "./core/wallet/wallet_id_enhanced";
 import { smartEscrowRouter } from "./core/escrow/smartEscrow";
 import { trustRouter } from "./core/trust";
+import { escrowRouter } from "../../interface/api/escrowRouter";
 import { createEncryptionManager } from "./core/security";
 import { ENV } from "./core/env";
 import { validatePhoneNumber } from "./core/middleware";
@@ -83,6 +86,7 @@ export const appRouter = router({
   trust: trustRouter,
   admin: adminRouter,
   verification: verificationRouter,
+  escrowV2: escrowRouter,
   
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
@@ -253,32 +257,17 @@ export const appRouter = router({
   // ============ ESCROW OPERATIONS ============
   escrow: router({
     create: protectedProcedure
-      .input(
-        z.object({
-          sellerId: z.number(),
-          title: z.string().min(5).max(200),
-          description: z.string().min(10).max(2000),
-          amount: z.string().refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) > 0),
-          commissionPaidBy: z.enum(["buyer", "seller", "split"]).default("seller"),
-        })
-      )
+      .input(createEscrowSchema)
       .mutation(async ({ ctx, input }) => {
-        const amount = new Decimal(input.amount);
-        const commissionRate = 0.05; // 5% platform fee
-        const commissionAmount = amount.mul(commissionRate).toFixed(2);
-
-        const result = await createEscrow({
+        const escrowId = await EscrowEngine.lockFunds({
           buyerId: ctx.user.id,
           sellerId: input.sellerId,
-          title: input.title,
-          description: input.description,
           amount: input.amount,
-          commissionAmount: commissionAmount,
-          commissionPaidBy: input.commissionPaidBy,
-          status: "draft",
+          description: input.description,
+          sellerWalletAddress: input.sellerWalletAddress,
         });
 
-        return { success: true, escrowId: result[0].insertId };
+        return { success: true, escrowId };
       }),
 
     getById: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {

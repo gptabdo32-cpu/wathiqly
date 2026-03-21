@@ -1,6 +1,6 @@
-import { Order, OrderStatus } from "../../domain/entities/order"
-import { transitionOrder } from "../../domain/order-state-machine"
-import { Payment } from "../../domain/entities/payment"
+import { Order, OrderStatus } from "../../modules/escrow/domain/order"
+import { transitionOrder } from "../../modules/escrow/domain/order-state-machine"
+import { Payment } from "../../modules/payments/domain/payment"
 
 export class PaymentService {
   processPayment(order: Order): { order: Order; payment: Payment } {
