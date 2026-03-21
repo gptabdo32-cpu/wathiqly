@@ -1,4 +1,5 @@
 import { CreateEscrow, CreateEscrowInput } from "./application/use-cases/CreateEscrow";
+import { LedgerService } from "../blockchain/LedgerService";
 import { ReleaseEscrow } from "./application/use-cases/ReleaseEscrow";
 import { OpenDispute, ResolveDispute } from "./application/use-cases/DisputeUseCases";
 
@@ -9,7 +10,8 @@ import { OpenDispute, ResolveDispute } from "./application/use-cases/DisputeUseC
  */
 export class EscrowEngine {
   static async lockFunds(params: CreateEscrowInput) {
-    return new CreateEscrow().execute(params);
+    const ledgerService = new LedgerService();
+    return new CreateEscrow(ledgerService).execute(params);
   }
 
   static async releaseFunds(escrowId: number) {

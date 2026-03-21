@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "../../../../apps/api/db";
 import { TransactionManager } from "../../../../core/db/TransactionManager";
 import { escrowContracts } from "../../../../drizzle/schema_escrow_engine";
-import { LedgerService } from "../../../ledger/LedgerService";
+import { ILedgerService } from "../../../blockchain/domain/ILedgerService";
 import { ledgerAccounts } from "../../../../drizzle/schema_ledger";
 import { publishToQueue } from "../../../events/EventQueue";
 import { EventType } from "../../../events/EventTypes";
@@ -17,6 +17,8 @@ export interface CreateEscrowInput {
 }
 
 export class CreateEscrow {
+  constructor(private ledgerService: ILedgerService) {}
+
   async execute(params: CreateEscrowInput) {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
@@ -30,13 +32,13 @@ export class CreateEscrow {
 
     if (!buyerAccount) throw new Error("Buyer Ledger Account not found");
     
-    const buyerBalance = await LedgerService.getAccountBalance(buyerAccount.id);
+    const buyerBalance = await this.ledgerService.getAccountBalance(buyerAccount.id);
     if (buyerBalance < parseFloat(params.amount)) {
       throw new Error("Insufficient funds in Buyer wallet");
     }
 
     // 2. Create a System Escrow Account for this contract
-    const escrowAccountId = await LedgerService.createAccount(
+    const escrowAccountId = await this.ledgerService.createAccount(
       0, // System user ID
       `Escrow Hold for ${params.description}`,
       "liability" // System holds this on behalf of parties
@@ -58,7 +60,7 @@ export class CreateEscrow {
       const id = contract.insertId;
 
       // 4. Move funds from Buyer Wallet to Escrow Hold via Ledger
-      await LedgerService.recordTransaction({
+      await this.ledgerService.recordTransaction({
         description: `Locking funds for Escrow #${id}`,
         referenceType: "escrow",
         referenceId: id,

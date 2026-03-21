@@ -6,8 +6,9 @@ import { idempotencyKeys } from "../../drizzle/schema_idempotency";
 import { FraudDetectionService } from "../utils/FraudDetectionService";
 import { eventBus } from "../events/EventBus";
 import { EventType } from "../events/EventTypes";
-
-export class LedgerService {
+import { ILedgerService } from "./domain/ILedgerService";
+	
+	export class LedgerService implements ILedgerService {
   /**
    * Calculates the current balance of an account from its ledger entries.
    * Retrieves the current balance of an account, prioritizing the cached balance.
