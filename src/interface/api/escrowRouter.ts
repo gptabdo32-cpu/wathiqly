@@ -30,7 +30,7 @@ export const escrowRouter = router({
     .mutation(async ({ input }) => {
       const disputeId = await EscrowEngine.openDispute(
         input.escrowId,
-        input.initiatorId,
+        ctx.user.id,
         input.reason
       );
       return { success: true, disputeId };
@@ -41,7 +41,7 @@ export const escrowRouter = router({
     .mutation(async ({ input }) => {
       const success = await EscrowEngine.resolveDispute(
         input.disputeId,
-        input.adminId,
+        ctx.user.id,
         input.resolution
       );
       return { success };
