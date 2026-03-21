@@ -18,10 +18,7 @@ export class CreateEscrow {
 
   async execute(params: CreateEscrowInput) {
     // 1. Logic check (Domain Rule): Amount validation
-    const amount = parseFloat(params.amount);
-    if (isNaN(amount) || amount <= 0) {
-      throw new Error("Invalid escrow amount");
-    }
+    EscrowDomainService.validateEscrowAmount(params.amount);
 
     return await TransactionManager.run(async (tx) => {
       // 2. Create a System Escrow Account for this contract

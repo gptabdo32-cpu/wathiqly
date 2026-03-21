@@ -1,5 +1,6 @@
 import { TransactionManager } from "../../../../core/db/TransactionManager";
 import { IEscrowRepository } from "../../domain/IEscrowRepository";
+import { EscrowDomainService } from "../../domain/EscrowDomainService";
 import { IPaymentService } from "../../domain/IPaymentService";
 
 export class ReleaseEscrow {
@@ -14,10 +15,8 @@ export class ReleaseEscrow {
       const contract = await this.escrowRepo.getById(escrowId, tx);
       if (!contract) throw new Error("Contract not found");
       
-      // 2. Domain Rule: Check transition (Should be in Domain Entity eventually)
-      if (contract.status !== "locked") {
-        throw new Error(`Invalid Escrow transition: ${contract.status} -> released`);
-      }
+      // 2. Domain Rule: Check transition
+      EscrowDomainService.canReleaseEscrow(contract);
 
       // 3. Update status to released via Repository
       await this.escrowRepo.updateStatus(escrowId, "released", tx);
