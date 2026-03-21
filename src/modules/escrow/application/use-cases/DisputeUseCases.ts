@@ -1,6 +1,6 @@
 import { TransactionManager } from "../../../../core/db/TransactionManager";
-import { ILedgerService } from "../../../blockchain/domain/ILedgerService";
 import { IEscrowRepository } from "../../domain/IEscrowRepository";
+import { IPaymentService } from "../../domain/IPaymentService";
 
 export class OpenDispute {
   constructor(private escrowRepo: IEscrowRepository) {}
@@ -38,7 +38,7 @@ export class OpenDispute {
 
 export class ResolveDispute {
   constructor(
-    private ledgerService: ILedgerService,
+    private paymentService: IPaymentService,
     private escrowRepo: IEscrowRepository
   ) {}
 
@@ -57,19 +57,23 @@ export class ResolveDispute {
       await this.escrowRepo.updateDispute(disputeId, { status: "resolved", resolution, adminId }, tx);
       await this.escrowRepo.updateStatus(contract.id, nextStatus, tx);
 
-      const targetAccountId = resolution === "buyer_refund" ? contract.buyerLedgerAccountId : 2; // Simplified seller lookup
-
-      await this.ledgerService.recordTransaction({
-        description: `Resolving Dispute #${disputeId} via ${resolution}`,
-        referenceType: "dispute",
-        referenceId: disputeId,
-        escrowContractId: contract.id,
-        idempotencyKey: `dispute_resolve_${disputeId}`,
-        entries: [
-          { accountId: contract.escrowLedgerAccountId, debit: "0.0000", credit: contract.amount },
-          { accountId: targetAccountId, debit: contract.amount, credit: "0.0000" },
-        ],
-      }, tx);
+      if (resolution === "buyer_refund") {
+        await this.paymentService.refundEscrowFunds(
+          contract.id,
+          contract.amount,
+          contract.escrowLedgerAccountId,
+          contract.buyerLedgerAccountId,
+          tx
+        );
+      } else {
+        await this.paymentService.releaseEscrowFunds(
+          contract.id,
+          contract.amount,
+          contract.escrowLedgerAccountId,
+          2, // Simplified seller lookup
+          tx
+        );
+      }
 
       if (contract.blockchainStatus === "synced" && contract.onChainId !== null) {
         await this.escrowRepo.saveOutboxEvent({

@@ -1,10 +1,10 @@
 import { TransactionManager } from "../../../../core/db/TransactionManager";
-import { ILedgerService } from "../../../blockchain/domain/ILedgerService";
 import { IEscrowRepository } from "../../domain/IEscrowRepository";
+import { IPaymentService } from "../../domain/IPaymentService";
 
 export class ReleaseEscrow {
   constructor(
-    private ledgerService: ILedgerService,
+    private paymentService: IPaymentService,
     private escrowRepo: IEscrowRepository
   ) {}
 
@@ -22,19 +22,14 @@ export class ReleaseEscrow {
       // 3. Update status to released via Repository
       await this.escrowRepo.updateStatus(escrowId, "released", tx);
 
-      // 4. Transfer funds from Escrow Hold to Seller Wallet via Ledger
-      // Note: Seller account lookup should be abstracted
-      await this.ledgerService.recordTransaction({
-        description: `Releasing funds for Escrow #${escrowId}`,
-        referenceType: "escrow",
-        referenceId: escrowId,
-        escrowContractId: escrowId,
-        idempotencyKey: `escrow_release_${escrowId}`,
-        entries: [
-          { accountId: contract.escrowLedgerAccountId, debit: "0.0000", credit: contract.amount },
-          { accountId: 2, debit: contract.amount, credit: "0.0000" }, // Simplified seller account ID
-        ],
-      }, tx);
+      // 4. Transfer funds from Escrow Hold to Seller Wallet via PaymentService
+      await this.paymentService.releaseEscrowFunds(
+        escrowId, 
+        contract.amount, 
+        contract.escrowLedgerAccountId, 
+        2, // Simplified seller account ID, should be from contract or service
+        tx
+      );
 
       // 5. ATOMIC OUTBOX: Blockchain Sync
       if (contract.blockchainStatus === "synced" && contract.onChainId !== null) {
