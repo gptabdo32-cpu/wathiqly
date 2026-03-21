@@ -1,6 +1,7 @@
 import { TransactionManager } from "../../../../core/db/TransactionManager";
 import { ILedgerService } from "../../../blockchain/domain/ILedgerService";
 import { IEscrowRepository } from "../../domain/IEscrowRepository";
+import { Escrow } from "../../domain/Escrow";
 
 export interface CreateEscrowInput {
   buyerId: number;
@@ -17,37 +18,36 @@ export class CreateEscrow {
   ) {}
 
   async execute(params: CreateEscrowInput) {
-    // 1. Logic check (Domain Rule): Amount validation
-    const amount = parseFloat(params.amount);
-    if (isNaN(amount) || amount <= 0) {
-      throw new Error("Invalid escrow amount");
-    }
-
-    // 2. Initial Checks (Should ideally use a Domain Service)
-    // Note: In a fully clean architecture, finding the buyerAccount would also go through a Repository
-    // For this refactor, we focus on the Escrow and Transactional consistency.
+    // 1. Domain Logic: Create the entity (Validation happens inside the Domain)
+    const escrow = Escrow.create({
+      buyerId: params.buyerId,
+      sellerId: params.sellerId,
+      amount: params.amount,
+      description: params.description,
+      blockchainStatus: params.sellerWalletAddress ? "pending" : "none",
+    });
 
     return await TransactionManager.run(async (tx) => {
-      // 3. Create a System Escrow Account for this contract
+      // 2. Infrastructure Logic: Create a System Escrow Account
       const escrowAccountId = await this.ledgerService.createAccount(
         0, // System user ID
         `Escrow Hold for ${params.description}`,
-        "liability"
+        "liability",
+        tx
       );
 
-      // 4. Record the Escrow Contract via Repository
-      const escrowId = await this.escrowRepo.create({
-        buyerId: params.buyerId,
-        sellerId: params.sellerId,
-        buyerLedgerAccountId: 0, // Simplified for now, would be resolved by a service
+      // 3. Update Domain Props with Infrastructure details
+      const props = escrow.getProps();
+      const updatedEscrow = Escrow.fromPersistence({
+        ...props,
+        buyerLedgerAccountId: 0, // Simplified for now
         escrowLedgerAccountId: escrowAccountId,
-        amount: params.amount,
-        status: "locked",
-        description: params.description,
-        blockchainStatus: params.sellerWalletAddress ? "pending" : "none",
-      }, tx);
+      });
 
-      // 5. Move funds via Ledger (Ensuring LedgerService supports 'tx' context)
+      // 4. Persistence: Record the Escrow Contract
+      const escrowId = await this.escrowRepo.create(updatedEscrow, tx);
+
+      // 5. Ledger: Move funds
       await this.ledgerService.recordTransaction({
         description: `Locking funds for Escrow #${escrowId}`,
         referenceType: "escrow",
@@ -60,7 +60,7 @@ export class CreateEscrow {
         ],
       }, tx);
 
-      // 6. ATOMIC OUTBOX: Save event inside the SAME transaction
+      // 6. ATOMIC OUTBOX: Save events inside the SAME transaction
       if (params.sellerWalletAddress) {
         await this.escrowRepo.saveOutboxEvent({
           aggregateType: "escrow",
@@ -75,7 +75,6 @@ export class CreateEscrow {
         }, tx);
       }
 
-      // 7. Internal Event (Outbox for deterministic internal processing)
       await this.escrowRepo.saveOutboxEvent({
         aggregateType: "escrow",
         aggregateId: escrowId,

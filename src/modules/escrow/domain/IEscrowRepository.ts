@@ -1,20 +1,11 @@
-import { CreateEscrowInput } from "../application/use-cases/CreateEscrow";
+import { Escrow } from "./Escrow";
 
 export interface IEscrowRepository {
-  create(data: {
-    buyerId: number;
-    sellerId: number;
-    buyerLedgerAccountId: number;
-    escrowLedgerAccountId: number;
-    amount: string;
-    status: string;
-    description: string;
-    blockchainStatus: string;
-  }, tx?: any): Promise<number>;
+  create(escrow: Escrow, tx?: any): Promise<number>;
 
-  getById(id: number, tx?: any): Promise<any>;
+  getById(id: number, tx?: any): Promise<Escrow | null>;
   
-  updateStatus(id: number, status: string, tx?: any): Promise<void>;
+  update(escrow: Escrow, tx?: any): Promise<void>;
   
   createDispute(data: {
     escrowId: number;
