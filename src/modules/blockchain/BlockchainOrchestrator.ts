@@ -2,6 +2,8 @@ import { getDb } from "../../server/db";
 import { outboxEvents } from "../../drizzle/schema_outbox";
 import { eq } from "drizzle-orm";
 import { blockchainService } from "./blockchain";
+import { eventBus } from "../../core/events/EventBus";
+import { EventType } from "../../core/events/EventTypes";
 import { escrowContracts } from "../../drizzle/schema_escrow_engine";
 import { disputes } from "../../drizzle/schema_escrow_engine";
 
@@ -36,6 +38,10 @@ export class BlockchainOrchestrator {
             .where(eq(escrowContracts.id, payload.escrowId));
             
           console.log(`[BlockchainOrchestrator] Escrow #${payload.escrowId} synced to blockchain: ${txHash}`);
+          
+          // Dispatch internal event for UI/Notifications
+          await eventBus.publish(EventType.ESCROW_FUNDS_LOCKED, payload);
+          
           return { success: true, txHash };
         }
         case "EscrowReleaseRequested": {
@@ -45,6 +51,10 @@ export class BlockchainOrchestrator {
             .set({ lastTxHash: txHash })
             .where(eq(escrowContracts.id, payload.escrowId));
           console.log(`[BlockchainOrchestrator] On-chain Escrow #${payload.onChainId} released. Tx: ${txHash}`);
+          
+          // Dispatch internal event
+          await eventBus.publish(EventType.ESCROW_FUNDS_RELEASED, payload);
+          
           return { success: true, txHash };
         }
         case "DisputeResolutionRequested": {
