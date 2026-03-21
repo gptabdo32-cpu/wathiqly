@@ -40,7 +40,7 @@ export class CreateEscrow {
 
       // 4. Update Domain Props with Infrastructure details
       const props = escrow.getProps();
-      const updatedEscrow = Escrow.fromPersistence({
+      const updatedEscrow = Escrow._reconstitute({
         ...props,
         id: escrowId,
         buyerLedgerAccountId: 0, // Simplified for now

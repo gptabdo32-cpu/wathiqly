@@ -4,20 +4,21 @@ import { Escrow } from "../domain/Escrow";
 import { escrowContracts, disputes } from "../../../drizzle/schema_escrow_engine";
 import { outboxEvents } from "../../../drizzle/schema_outbox";
 import { getDb } from "../../../apps/api/db";
+import { EscrowMapper } from "./EscrowMapper";
 
 export class DrizzleEscrowRepository implements IEscrowRepository {
   async create(escrow: Escrow, tx?: any): Promise<number> {
     const db = tx || (await getDb());
-    const props = escrow.getProps();
+    const persistence = EscrowMapper.toPersistence(escrow);
     const [result] = await db.insert(escrowContracts).values({
-      buyerId: props.buyerId,
-      sellerId: props.sellerId,
-      buyerLedgerAccountId: props.buyerLedgerAccountId,
-      escrowLedgerAccountId: props.escrowLedgerAccountId,
-      amount: props.amount,
-      status: props.status,
-      description: props.description,
-      blockchainStatus: props.blockchainStatus,
+      buyerId: persistence.buyerId,
+      sellerId: persistence.sellerId,
+      buyerLedgerAccountId: persistence.buyerLedgerAccountId,
+      escrowLedgerAccountId: persistence.escrowLedgerAccountId,
+      amount: persistence.amount,
+      status: persistence.status,
+      description: persistence.description,
+      blockchainStatus: persistence.blockchainStatus,
     });
     return result.insertId;
   }
@@ -32,33 +33,23 @@ export class DrizzleEscrowRepository implements IEscrowRepository {
     
     if (!row) return null;
     
-    return Escrow.fromPersistence({
-      id: row.id,
-      buyerId: row.buyerId,
-      sellerId: row.sellerId,
-      amount: row.amount,
-      status: row.status as any,
-      description: row.description,
-      buyerLedgerAccountId: row.buyerLedgerAccountId,
-      escrowLedgerAccountId: row.escrowLedgerAccountId,
-      blockchainStatus: row.blockchainStatus as any,
-    });
+    return EscrowMapper.toDomain(row);
   }
 
   async update(escrow: Escrow, tx?: any): Promise<void> {
     const db = tx || (await getDb());
-    const props = escrow.getProps();
-    if (!props.id) throw new Error("Cannot update escrow without ID");
+    const persistence = EscrowMapper.toPersistence(escrow);
+    if (!persistence.id) throw new Error("Cannot update escrow without ID");
     
     await db
       .update(escrowContracts)
       .set({
-        status: props.status,
-        blockchainStatus: props.blockchainStatus,
-        buyerLedgerAccountId: props.buyerLedgerAccountId,
-        escrowLedgerAccountId: props.escrowLedgerAccountId,
+        status: persistence.status,
+        blockchainStatus: persistence.blockchainStatus,
+        buyerLedgerAccountId: persistence.buyerLedgerAccountId,
+        escrowLedgerAccountId: persistence.escrowLedgerAccountId,
       })
-      .where(eq(escrowContracts.id, props.id));
+      .where(eq(escrowContracts.id, persistence.id));
   }
 
   async createDispute(data: any, tx?: any): Promise<number> {

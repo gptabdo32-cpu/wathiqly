@@ -27,8 +27,6 @@ export class Escrow {
       throw new Error("Escrow description too short");
     }
 
-
-
     return new Escrow({
       ...props,
       status: "locked", // Initial status for new escrow
@@ -36,7 +34,11 @@ export class Escrow {
     });
   }
 
-  public static fromPersistence(props: EscrowProps): Escrow {
+  /**
+   * Internal factory for infrastructure mapping.
+   * This should only be used by Mappers in the Infrastructure layer.
+   */
+  public static _reconstitute(props: EscrowProps): Escrow {
     return new Escrow(props);
   }
 
@@ -75,6 +77,5 @@ export class Escrow {
 
   public setBlockchainStatus(status: "none" | "pending" | "confirmed" | "failed", txHash?: string): void {
     this.props.blockchainStatus = status;
-    // Optionally, store txHash if needed in the domain
   }
 }
