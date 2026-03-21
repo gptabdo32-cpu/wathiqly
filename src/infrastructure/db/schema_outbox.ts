@@ -1,17 +1,20 @@
 import { int, mysqlTable, text, timestamp, varchar, json } from "drizzle-orm/mysql-core";
 
 /**
- * Outbox Table
- * Stores events that need to be reliably processed by external systems (e.g., blockchain, other microservices).
- * Implements the Outbox Pattern to ensure atomicity between local database transactions and external side effects.
+ * Outbox Table (Enhanced)
+ * Stores events that need to be reliably processed by external systems.
+ * Implements the Outbox Pattern with Idempotency and Versioning.
  */
 export const outboxEvents = mysqlTable("outbox_events", {
   id: int("id").autoincrement().primaryKey(),
+  eventId: varchar("eventId", { length: 64 }).notNull().unique(), // UUID for global event tracking
   aggregateType: varchar("aggregateType", { length: 100 }).notNull(), // e.g., "escrow", "dispute"
-  aggregateId: int("aggregateId").notNull(), // ID of the related entity (e.g., escrowId, disputeId)
-  eventType: varchar("eventType", { length: 100 }).notNull(), // e.g., "EscrowLocked", "EscrowReleased"
+  aggregateId: int("aggregateId").notNull(), // ID of the related entity
+  eventType: varchar("eventType", { length: 100 }).notNull(), // e.g., "EscrowLocked"
+  version: int("version").default(1).notNull(), // Event schema version
   payload: json("payload").notNull(), // JSON payload containing event data
-  status: varchar("status", { length: 50 }).default("pending").notNull(), // "pending", "processing", "completed", "failed"
+  idempotencyKey: varchar("idempotencyKey", { length: 128 }).notNull().unique(), // Prevents duplicate processing
+  status: varchar("status", { length: 50 }).default("pending").notNull(), // "pending", "processing", "completed", "failed", "dead_letter"
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   processedAt: timestamp("processedAt"),
   retries: int("retries").default(0).notNull(),
