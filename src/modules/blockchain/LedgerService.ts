@@ -4,8 +4,6 @@ import { getDb } from "../../apps/api/db";
 import { ledgerAccounts, ledgerTransactions, ledgerEntries } from "../../drizzle/schema_ledger";
 import { idempotencyKeys } from "../../drizzle/schema_idempotency";
 import { FraudDetectionService } from "../utils/FraudDetectionService";
-import { eventBus } from "../events/EventBus";
-import { EventType } from "../events/EventTypes";
 import { ILedgerService } from "./domain/ILedgerService";
 
 export class LedgerService implements ILedgerService {
