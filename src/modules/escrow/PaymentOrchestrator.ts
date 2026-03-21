@@ -1,6 +1,7 @@
 import { CreateEscrow, CreateEscrowInput } from "./application/use-cases/CreateEscrow";
 import { ReleaseEscrow } from "./application/use-cases/ReleaseEscrow";
 import { LedgerService } from "../blockchain/LedgerService";
+import { LedgerPaymentService } from "./infrastructure/LedgerPaymentService";
 import { DrizzleEscrowRepository } from "./infrastructure/DrizzleEscrowRepository";
 
 /**
@@ -10,19 +11,20 @@ import { DrizzleEscrowRepository } from "./infrastructure/DrizzleEscrowRepositor
  */
 export class PaymentOrchestrator {
   private static getDependencies() {
+    const ledgerService = new LedgerService();
     return {
-      ledgerService: new LedgerService(),
+      paymentService: new LedgerPaymentService(ledgerService),
       escrowRepo: new DrizzleEscrowRepository()
     };
   }
 
   static async initiateEscrow(params: CreateEscrowInput) {
-    const { ledgerService, escrowRepo } = this.getDependencies();
-    return new CreateEscrow(ledgerService, escrowRepo).execute(params);
+    const { paymentService, escrowRepo } = this.getDependencies();
+    return new CreateEscrow(paymentService, escrowRepo).execute(params);
   }
 
   static async completeEscrow(escrowId: number) {
-    const { ledgerService, escrowRepo } = this.getDependencies();
-    return new ReleaseEscrow(ledgerService, escrowRepo).execute(escrowId);
+    const { paymentService, escrowRepo } = this.getDependencies();
+    return new ReleaseEscrow(paymentService, escrowRepo).execute(escrowId);
   }
 }

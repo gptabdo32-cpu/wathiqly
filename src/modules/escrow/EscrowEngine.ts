@@ -21,7 +21,7 @@ export class EscrowEngine {
 
   static async lockFunds(params: CreateEscrowInput) {
     const { paymentService, escrowRepo } = this.getDependencies();
-    return new CreateEscrow(paymentService, escrowRepo).execute(params);
+     return new CreateEscrow(paymentService, escrowRepo).execute(params);
   }
 
   static async releaseFunds(escrowId: number) {
