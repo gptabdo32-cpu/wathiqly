@@ -16,6 +16,17 @@ export interface IEscrowRepository {
   
   updateStatus(id: number, status: string, tx?: any): Promise<void>;
   
+  createDispute(data: {
+    escrowId: number;
+    initiatorId: number;
+    reason: string;
+    status: string;
+  }, tx?: any): Promise<number>;
+
+  getDisputeById(id: number, tx?: any): Promise<any>;
+
+  updateDispute(id: number, data: any, tx?: any): Promise<void>;
+  
   saveOutboxEvent(event: {
     aggregateType: string;
     aggregateId: number;

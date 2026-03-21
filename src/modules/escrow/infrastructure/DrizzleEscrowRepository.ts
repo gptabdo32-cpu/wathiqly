@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { IEscrowRepository } from "../domain/IEscrowRepository";
-import { escrowContracts } from "../../../drizzle/schema_escrow_engine";
+import { escrowContracts, disputes } from "../../../drizzle/schema_escrow_engine";
 import { outboxEvents } from "../../../drizzle/schema_outbox";
 import { getDb } from "../../../apps/api/db";
 
@@ -27,6 +27,30 @@ export class DrizzleEscrowRepository implements IEscrowRepository {
       .update(escrowContracts)
       .set({ status })
       .where(eq(escrowContracts.id, id));
+  }
+
+  async createDispute(data: any, tx?: any): Promise<number> {
+    const db = tx || (await getDb());
+    const [dispute] = await db.insert(disputes).values(data);
+    return dispute.insertId;
+  }
+
+  async getDisputeById(id: number, tx?: any): Promise<any> {
+    const db = tx || (await getDb());
+    const [dispute] = await db
+      .select()
+      .from(disputes)
+      .where(eq(disputes.id, id))
+      .limit(1);
+    return dispute;
+  }
+
+  async updateDispute(id: number, data: any, tx?: any): Promise<void> {
+    const db = tx || (await getDb());
+    await db
+      .update(disputes)
+      .set(data)
+      .where(eq(disputes.id, id));
   }
 
   async saveOutboxEvent(event: any, tx?: any): Promise<void> {
