@@ -1,20 +1,24 @@
-# تقرير الانتهاكات المعمارية - مشروع Wathiqly
+# تقرير انتهاكات الهندسة المعمارية المحدث (Updated Architecture Violations Report)
 
-تم تحليل الكود المصدري الحالي ورصد الانتهاكات التالية بناءً على قواعد **Clean Architecture** الصارمة المطلوبة:
+بناءً على القواعد الصارمة الـ 20 المحددة، تم تحديث تحليل الانتهاكات في النظام الحالي:
 
-| المعيار | الحالة الحالية | الانتهاك | الإجراء المطلوب |
+| القاعدة | الانتهاك المحدد | الملف المتأثر | السبب / الملاحظة |
 | :--- | :--- | :--- | :--- |
-| **طبقة الـ Domain** | القواعد موجودة في UseCases | `CreateEscrow.ts` يقوم بالتحقق من المبلغ (parseFloat) والتحقق من القيمة (> 0) مباشرة. | نقل كل منطق التحقق من صحة البيانات المالية إلى كيانات الـ Domain. |
-| **طبقة الـ Application** | اعتماد مباشر على التنفيذ | `CreateEscrow` و `DisputeUseCases` يستوردون `TransactionManager` و `LedgerService` مباشرة. | الاعتماد فقط على الواجهات (Interfaces) وتمرير التبعيات عبر المشيد. |
-| **اتساق المعاملات (Transactions)** | تنفيذ جزئي | يتم استخدام `TransactionManager.run` ولكن بعض العمليات الخارجية قد لا تزال خارج النطاق. | التأكد من أن جميع عمليات الكتابة (DB + Outbox) تمر عبر نفس سياق المعاملة `tx`. |
-| **نمط الـ Outbox** | تنفيذ غير مكتمل | `OrchestrationLayer.ts` لا يزال يستخدم `eventBus.publish` مباشرة بعد نجاح العمليات. | منع النشر المباشر للأحداث؛ يجب أن تخرج جميع الأحداث من الـ Outbox فقط لضمان الموثوقية. |
-| **الواجهات (Facades)** | أخطاء في الربط | `DisputeOrchestrator.ts` ينشئ حالات الاستخدام دون تمرير التبعيات المطلوبة (ledgerService, escrowRepo). | إصلاح مشيدات حالات الاستخدام في جميع الواجهات. |
-| **عزل الوحدات (Modules)** | استيرادات متداخلة | توجد استيرادات مباشرة بين `escrow` و `blockchain` و `payments`. | استخدام الواجهات المشتركة (Shared Interfaces) لفك الارتباط بين الوحدات. |
+| **1. إزالة الأوركسترا المزدوجة** | استخدام `EscrowEngine` المفقود | `src/apps/api/routers.ts` | لا يزال يستورد ويستخدم `EscrowEngine` بدلاً من `Use Cases`. |
+| **2. نقاء النطاق (Domain)** | وجود `_reconstitute` و `getProps` | `src/modules/escrow/domain/Escrow.ts` | النطاق يجب أن يكون 100% نقي وبدون أي وعي بالبنية التحتية. |
+| **4. استبدال التبعيات بواجهات** | الاعتماد على فئات ملموسة | `src/core/di/container.ts` | الـ Container ينشئ `LedgerService` و `PaymentService` مباشرة. |
+| **8. فرض نمط Outbox** | حفظ يدوي للأحداث | `src/modules/escrow/application/use-cases/CreateEscrow.ts` | يتم حفظ الأحداث يدوياً ولا يوجد Background Worker آلي. |
+| **11. توحيد عقود الأحداث** | توليد عشوائي للمعرفات | `src/modules/escrow/application/use-cases/CreateEscrow.ts` | لا يتم استخدام مصنع أحداث موحد يضمن الالتزام بالعقود. |
+| **13. تنفيذ EscrowSaga** | عدم استخدام الـ Saga | `src/apps/api/routers.ts` | التدفق الحالي لا يمر عبر `EscrowSaga` المنفذ جزئياً. |
+| **16. إزالة fromPersistence** | وجود `_reconstitute` | `src/modules/escrow/domain/Escrow.ts` | يجب إزالة أي ميثود مخصصة لإعادة البناء من طبقة النطاق. |
+| **19. فئات أخطاء صارمة** | استخدام `Error` العام | `src/core/db/TransactionManager.ts` | يتم رمي `Error` عام بدلاً من فئات أخطاء مخصصة وصارمة. |
+| **20. العمليات غير المتزامنة** | تفاعلات بلوكشين متزامنة | `src/modules/escrow/infrastructure/PaymentService.ts` | العمليات المالية تتم بشكل متزامن داخل دورة حياة الطلب. |
 
 ---
 
-### **خطة الإصلاح الفوري:**
-1.  **المرحلة الأولى:** إصلاح طبقة الـ Domain واستخراج قواعد العمل.
-2.  **المرحلة الثانية:** إصلاح طبقة الـ Application وفك الارتباط بالتنفيذ.
-3.  **المرحلة الثالثة:** توحيد نظام الأحداث عبر الـ Outbox حصراً.
-4.  **المرحلة الرابعة:** إصلاح الواجهات وضمان عمل النظام بشكل متكامل.
+### **الخطوات القادمة للإصلاح:**
+1.  **حذف** `EscrowEngine` و `OrchestrationLayer` و `PaymentOrchestrator` (إن وجدت) وتوجيه كافة الطلبات عبر `EscrowSaga`.
+2.  **تنقية** طبقة الـ Domain ونقل منطق الـ Mapping بالكامل إلى الـ Infrastructure.
+3.  **تطبيق** Dependency Injection حقيقي باستخدام الواجهات في الـ Container.
+4.  **بناء** Background Worker لمعالجة الـ Outbox مع دعم الـ Retry و DLQ.
+5.  **تفعيل** الـ Saga Orchestration لضمان الاتساق المالي والتراجع عند الفشل.
