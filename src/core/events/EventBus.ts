@@ -1,5 +1,13 @@
 type EventHandler<T = any> = (data: T) => void | Promise<void>;
 
+export interface IntegrationEvent<T = any> {
+  id: string;
+  type: string;
+  timestamp: Date;
+  payload: T;
+  metadata?: Record<string, any>;
+}
+
 export class EventBus {
   private static instance: EventBus;
   private handlers: Map<string, EventHandler[]> = new Map();
@@ -30,22 +38,22 @@ export class EventBus {
   public async publish<T>(event: string, data: T): Promise<void> {
     const handlers = this.handlers.get(event);
     if (!handlers || handlers.length === 0) {
-      console.log(`[EventBus] No handlers for event: ${event}`);
+      console.log(`[EventBus] No local handlers for event: ${event}`);
       return;
     }
 
     console.log(`[EventBus] Publishing event: ${event}`, data);
 
-    // Execute all handlers asynchronously
-    const promises = handlers.map(async (handler) => {
+    // Execute all handlers
+    // In a distributed system, this would be pushed to a Message Queue (Redis/RabbitMQ)
+    for (const handler of handlers) {
       try {
         await handler(data);
       } catch (error) {
         console.error(`[EventBus] Error in handler for event ${event}:`, error);
+        // Implement retry logic or dead-letter queue here
       }
-    });
-
-    await Promise.all(promises);
+    }
   }
 }
 
