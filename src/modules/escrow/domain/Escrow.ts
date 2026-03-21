@@ -15,7 +15,7 @@ export interface EscrowProps {
 export class Escrow {
   private constructor(private props: EscrowProps) {}
 
-  public static create(props: Omit<EscrowProps, "status">): Escrow {
+  public static create(props: Omit<EscrowProps, "status" | "blockchainStatus"> & { sellerWalletAddress?: string }): Escrow {
     // Business Rule: Amount validation
     const amountNum = parseFloat(props.amount);
     if (isNaN(amountNum) || amountNum <= 0) {
@@ -27,9 +27,13 @@ export class Escrow {
       throw new Error("Escrow description too short");
     }
 
+    // Business Rule: Determine blockchain status
+    const blockchainStatus = props.sellerWalletAddress ? "pending" : "none";
+
     return new Escrow({
       ...props,
       status: "locked", // Initial status for new escrow
+      blockchainStatus,
     });
   }
 

@@ -24,7 +24,7 @@ export class CreateEscrow {
       sellerId: params.sellerId,
       amount: params.amount,
       description: params.description,
-      blockchainStatus: params.sellerWalletAddress ? "pending" : "none",
+      sellerWalletAddress: params.sellerWalletAddress,
     });
 
     return await TransactionManager.run(async (tx) => {
