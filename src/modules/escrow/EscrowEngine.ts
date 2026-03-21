@@ -2,6 +2,11 @@ import { CreateEscrow, CreateEscrowInput } from "./application/use-cases/CreateE
 import { ReleaseEscrow } from "./application/use-cases/ReleaseEscrow";
 import { OpenDispute, ResolveDispute } from "./application/use-cases/DisputeUseCases";
 
+/**
+ * EscrowEngine Facade
+ * Phase 3.1: Converted to a pure Facade. 
+ * All business logic, DB calls, and conditions must reside in use cases (Application Layer).
+ */
 export class EscrowEngine {
   static async lockFunds(params: CreateEscrowInput) {
     return new CreateEscrow().execute(params);
