@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
-import { getDb } from "../../../../server/db";
+import { getDb } from "../../../../apps/api/db";
+import { TransactionManager } from "../../../../core/db/TransactionManager";
 import { escrowContracts } from "../../../../drizzle/schema_escrow_engine";
 import { LedgerService } from "../../../ledger/LedgerService";
 import { ledgerAccounts } from "../../../../drizzle/schema_ledger";
@@ -41,7 +42,7 @@ export class CreateEscrow {
       "liability" // System holds this on behalf of parties
     );
 
-    const escrowId = await db.transaction(async (tx) => {
+    const escrowId = await TransactionManager.run(async (tx) => {
       // 3. Record the Escrow Contract
       const [contract] = await tx.insert(escrowContracts).values({
         buyerId: params.buyerId,
