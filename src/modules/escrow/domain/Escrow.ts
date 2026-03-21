@@ -27,13 +27,12 @@ export class Escrow {
       throw new Error("Escrow description too short");
     }
 
-    // Business Rule: Determine blockchain status
-    const blockchainStatus = props.sellerWalletAddress ? "pending" : "none";
+
 
     return new Escrow({
       ...props,
       status: "locked", // Initial status for new escrow
-      blockchainStatus,
+      blockchainStatus: "none",
     });
   }
 
@@ -72,5 +71,10 @@ export class Escrow {
       throw new Error(`Cannot refund escrow in status: ${this.props.status}`);
     }
     this.props.status = "refunded";
+  }
+
+  public setBlockchainStatus(status: "none" | "pending" | "confirmed" | "failed", txHash?: string): void {
+    this.props.blockchainStatus = status;
+    // Optionally, store txHash if needed in the domain
   }
 }
