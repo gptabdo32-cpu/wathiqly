@@ -116,8 +116,22 @@ export class OutboxWorker {
     }
   }
 
-  private async handleDeadLetter(event: { correlationId: string; eventType: string; eventId: string }) {
-    // Rule 7: DLQ handling - could be moving to a different table or alerting
-    Logger.error(`[Outbox][DLQ][CID:${event.correlationId}] Event ${event.eventType} (ID: ${event.eventId}) moved to Dead Letter Queue after max retries.`);
+  private async handleDeadLetter(event: { correlationId: string; eventType: string; eventId: string; payload: any; error: string | null }) {
+    // Improvement 6: DLQ handling - log comprehensive details for further analysis or manual intervention
+    Logger.error(
+      `[Outbox][DLQ][CID:${event.correlationId}] Event ${event.eventType} (ID: ${event.eventId}) moved to Dead Letter Queue after max retries.`,
+      { 
+        eventId: event.eventId,
+        eventType: event.eventType,
+        correlationId: event.correlationId,
+        payload: event.payload, // Include payload for debugging
+        error: event.error, // Include the final error
+        timestamp: new Date().toISOString()
+      }
+    );
+    // In a real-world scenario, this would involve:
+    // 1. Persisting the event to a dedicated DLQ table for manual review/reprocessing.
+    // 2. Triggering an alert to the operations team.
+    // 3. Potentially sending to a separate queue for automated error handling workflows.
   }
 }
