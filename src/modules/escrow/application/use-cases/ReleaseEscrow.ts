@@ -1,49 +1,61 @@
 import { TransactionManager } from "../../../../core/db/TransactionManager";
 import { IEscrowRepository } from "../../domain/IEscrowRepository";
-import { IPaymentService } from "../../domain/IPaymentService";
+import { v4 as uuidv4 } from 'uuid';
+import { Logger } from "../../../../core/observability/Logger";
 
+/**
+ * ReleaseEscrow Use Case (Event-Driven)
+ * RULE 1: Remove all synchronous cross-module calls
+ * RULE 2: Introduce real event-driven communication
+ * RULE 18: Add correlationId across all flows
+ */
 export class ReleaseEscrow {
   constructor(
-    private paymentService: IPaymentService,
     private escrowRepo: IEscrowRepository
   ) {}
 
   async execute(escrowId: number) {
+    const correlationId = uuidv4();
+
     return await TransactionManager.run(async (tx) => {
       // 1. Persistence: Get contract via Repository
       const escrow = await this.escrowRepo.getById(escrowId, tx);
       if (!escrow) throw new Error("Escrow not found");
       
       // 2. Domain Rule: Perform transition inside the Entity
-      escrow.release();
-
-      // 3. Persistence: Update status
-      await this.escrowRepo.update(escrow, tx);
-
-      const props = (escrow as any)._getInternalProps();
-
-      // 4. Infrastructure Logic: Release funds via PaymentService
-      await this.paymentService.releaseEscrowFunds({
+      // We don't release yet, we start a ReleaseSaga
+      
+      // 3. Saga State Initialization
+      await this.escrowRepo.createSagaInstance({
+        correlationId,
         escrowId,
-        amount: props.amount,
-        escrowLedgerAccountId: props.escrowLedgerAccountId!,
-        sellerLedgerAccountId: 2, // Simplified seller account ID
+        status: "RELEASE_STARTED",
+        payload: { escrowId },
       }, tx);
 
-      // 5. ATOMIC OUTBOX: Internal Notification
+      // 4. ATOMIC OUTBOX: Save event inside the SAME transaction
       await this.escrowRepo.saveOutboxEvent({
+        eventId: uuidv4(),
         aggregateType: "escrow",
         aggregateId: escrowId,
-        eventType: "EscrowFundsReleased",
+        eventType: "EscrowReleaseRequested",
+        version: 1,
         payload: {
           escrowId,
-          sellerId: props.sellerId,
-          amount: props.amount,
+          buyerId: escrow.buyerId,
+          sellerId: escrow.sellerId,
+          amount: escrow.amount,
+          escrowLedgerAccountId: escrow.escrowLedgerAccountId,
+          correlationId,
         },
+        correlationId,
+        idempotencyKey: `escrow_release_req_${escrowId}`,
         status: "pending",
       }, tx);
 
-      return true;
+      Logger.info(`[ReleaseEscrow][CID:${correlationId}] Release requested for Escrow #${escrowId}`);
+
+      return { success: true, correlationId };
     });
   }
 }
