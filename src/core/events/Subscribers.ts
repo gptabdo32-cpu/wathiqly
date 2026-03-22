@@ -3,6 +3,8 @@ import { EventType } from "./EventTypes";
 import { Logger } from "../observability/Logger";
 import { Container } from "../di/container";
 import { EscrowSaga } from "../../modules/escrow/application/EscrowSaga";
+import { PaymentSaga } from "../../modules/payments/application/PaymentSaga";
+import { StripePaymentProvider } from "../../modules/payments/infrastructure/StripePaymentProvider";
 
 /**
  * Initialize all system-wide subscribers.
@@ -35,35 +37,14 @@ export function initializeSubscribers() {
     }
   });
 
-  // 2. Payment Module Handlers
+  // 2. Payment Module Handlers (Rule 9: Saga State Machines)
+  const paymentProvider = new StripePaymentProvider(); // Rule 11: Real provider
+  const paymentSaga = new PaymentSaga(paymentProvider);
+
   eventBus.subscribe("LockFundsCommand", async (data: any) => {
-    const correlationId = data.correlationId;
-    Logger.info(`[Payment][CID:${correlationId}] Locking funds for Escrow #${data.escrowId}`);
-    
-    try {
-      // Logic to interact with LedgerService/PaymentProvider
-      // For now, we simulate success/failure to test the Saga
-      const success = Math.random() > 0.1; // RULE 10: Remove "always success" logic
-      
-      if (success) {
-        const ledgerAccountId = Math.floor(Math.random() * 1000);
-        await eventBus.publish("PaymentCompleted", {
-          correlationId,
-          escrowLedgerAccountId: ledgerAccountId
-        });
-      } else {
-        await eventBus.publish("PaymentFailed", {
-          correlationId,
-          reason: "Insufficient funds in buyer wallet"
-        });
-      }
-    } catch (error: any) {
-      Logger.error(`[Payment][CID:${correlationId}] Payment processing error`, error);
-      await eventBus.publish("PaymentFailed", {
-        correlationId,
-        reason: error.message
-      });
-    }
+    // Rule 1: Remove all synchronous cross-module calls
+    // Rule 17: Enforce module boundaries
+    await paymentSaga.handleLockFunds(data);
   });
 
   // 3. Saga Completion Handlers
