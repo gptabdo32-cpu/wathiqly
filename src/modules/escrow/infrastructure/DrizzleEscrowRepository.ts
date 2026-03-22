@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { IEscrowRepository } from "../domain/IEscrowRepository";
+import { IEscrowRepository, OutboxEventInput, SagaInstanceInput } from "../domain/IEscrowRepository";
 import { Escrow } from "../domain/Escrow";
 import { escrows, disputes, escrowSagaInstances } from "../../../infrastructure/db/schema";
 import { outboxEvents } from "../../../infrastructure/db/schema_outbox";
@@ -12,7 +12,6 @@ export class DrizzleEscrowRepository implements IEscrowRepository {
     const db = tx || (await getDb());
     const persistence = EscrowMapper.toPersistence(escrow);
     
-    // Use TransactionManager internally if no tx provided to ensure ACID (Task 1)
     const operation = async (dbTx: any) => {
       const [result] = await dbTx.insert(escrows).values({
         buyerId: persistence.buyerId,
@@ -21,7 +20,7 @@ export class DrizzleEscrowRepository implements IEscrowRepository {
         status: persistence.status as any,
         title: persistence.description.substring(0, 255),
         description: persistence.description,
-        commissionAmount: "0.00", // Default for now
+        commissionAmount: "0.00",
       });
       return result.insertId;
     };
@@ -56,13 +55,18 @@ export class DrizzleEscrowRepository implements IEscrowRepository {
       .where(eq(escrows.id, persistence.id));
   }
 
-  async createDispute(data: any, tx?: any): Promise<number> {
+  async createDispute(data: {
+    escrowId: number;
+    initiatorId: number;
+    reason: string;
+    status: string;
+  }, tx?: any): Promise<number> {
     const db = tx || (await getDb());
     const [dispute] = await db.insert(disputes).values(data);
     return dispute.insertId;
   }
 
-  async getDisputeById(id: number, tx?: any): Promise<any> {
+  async getDisputeById(id: number, tx?: any): Promise<unknown> {
     const db = tx || (await getDb());
     const [dispute] = await db
       .select()
@@ -72,7 +76,7 @@ export class DrizzleEscrowRepository implements IEscrowRepository {
     return dispute;
   }
 
-  async updateDispute(id: number, data: any, tx?: any): Promise<void> {
+  async updateDispute(id: number, data: Record<string, unknown>, tx?: any): Promise<void> {
     const db = tx || (await getDb());
     await db
       .update(disputes)
@@ -80,31 +84,35 @@ export class DrizzleEscrowRepository implements IEscrowRepository {
       .where(eq(disputes.id, id));
   }
 
-  async saveOutboxEvent(event: any, tx?: any): Promise<void> {
+  async saveOutboxEvent(event: OutboxEventInput, tx?: any): Promise<void> {
     const db = tx || (await getDb());
-    await db.insert(outboxEvents).values(event);
+    await db.insert(outboxEvents).values({
+      ...event,
+      payload: event.payload as any // Drizzle JSON handling
+    });
   }
 
-  async updateEscrowBlockchainStatus(escrowId: number, blockchainStatus: any, lastTxHash: string, tx?: any): Promise<void> {
+  async updateEscrowBlockchainStatus(escrowId: number, blockchainStatus: "none" | "pending" | "confirmed" | "failed", lastTxHash: string, tx?: any): Promise<void> {
     const db = tx || (await getDb());
-    // In the new schema, we might need to add these fields or use a separate table
-    // For now, keeping it compatible with the interface
+    // Placeholder for future blockchain status updates
   }
 
   async updateDisputeBlockchainStatus(disputeId: number, blockchainTxHash: string, tx?: any): Promise<void> {
     const db = tx || (await getDb());
     await db.update(disputes)
-      .set({ updatedAt: new Date() }) // Placeholder
+      .set({ updatedAt: new Date() })
       .where(eq(disputes.id, disputeId));
   }
 
-  // Saga Instance Methods (Task 3)
-  async createSagaInstance(instance: any, tx?: any): Promise<void> {
+  async createSagaInstance(instance: SagaInstanceInput, tx?: any): Promise<void> {
     const db = tx || (await getDb());
-    await db.insert(escrowSagaInstances).values(instance);
+    await db.insert(escrowSagaInstances).values({
+      ...instance,
+      payload: instance.payload as any // Drizzle JSON handling
+    });
   }
 
-  async getSagaInstanceByCorrelationId(correlationId: string, tx?: any): Promise<any> {
+  async getSagaInstanceByCorrelationId(correlationId: string, tx?: any): Promise<unknown> {
     const db = tx || (await getDb());
     const [row] = await db
       .select()
@@ -114,7 +122,7 @@ export class DrizzleEscrowRepository implements IEscrowRepository {
     return row;
   }
 
-  async updateSagaStatus(correlationId: string, status: any, error?: string, tx?: any): Promise<void> {
+  async updateSagaStatus(correlationId: string, status: SagaInstanceInput["status"], error?: string, tx?: any): Promise<void> {
     const db = tx || (await getDb());
     await db
       .update(escrowSagaInstances)

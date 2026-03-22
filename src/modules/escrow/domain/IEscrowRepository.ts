@@ -1,35 +1,48 @@
 import { Escrow } from "./Escrow";
 
-export interface IEscrowRepository {
-  create(escrow: Escrow, tx?: any): Promise<number>;
+export interface OutboxEventInput {
+  eventId: string;
+  aggregateType: string;
+  aggregateId: number;
+  eventType: string;
+  version: number;
+  payload: Record<string, unknown>;
+  correlationId: string;
+  idempotencyKey: string;
+  status: "pending" | "processing" | "completed" | "failed" | "dead_letter";
+}
 
-  getById(id: number, tx?: any): Promise<Escrow | null>;
+export interface SagaInstanceInput {
+  correlationId: string;
+  escrowId: number;
+  status: "INIT" | "ESCROW_CREATED" | "FUNDS_PENDING" | "COMPLETED" | "FAILED";
+  payload: Record<string, unknown>;
+}
+
+export interface IEscrowRepository {
+  create(escrow: Escrow, tx?: unknown): Promise<number>;
+
+  getById(id: number, tx?: unknown): Promise<Escrow | null>;
   
-  update(escrow: Escrow, tx?: any): Promise<void>;
-  updateEscrowBlockchainStatus(escrowId: number, blockchainStatus: "none" | "pending" | "confirmed" | "failed", lastTxHash: string, tx?: any): Promise<void>;
-  updateDisputeBlockchainStatus(disputeId: number, blockchainTxHash: string, tx?: any): Promise<void>;
+  update(escrow: Escrow, tx?: unknown): Promise<void>;
+  updateEscrowBlockchainStatus(escrowId: number, blockchainStatus: "none" | "pending" | "confirmed" | "failed", lastTxHash: string, tx?: unknown): Promise<void>;
+  updateDisputeBlockchainStatus(disputeId: number, blockchainTxHash: string, tx?: unknown): Promise<void>;
   
   createDispute(data: {
     escrowId: number;
     initiatorId: number;
     reason: string;
     status: string;
-  }, tx?: any): Promise<number>;
+  }, tx?: unknown): Promise<number>;
 
-  getDisputeById(id: number, tx?: any): Promise<any>;
+  getDisputeById(id: number, tx?: unknown): Promise<unknown>;
 
-  updateDispute(id: number, data: any, tx?: any): Promise<void>;
+  updateDispute(id: number, data: Record<string, unknown>, tx?: unknown): Promise<void>;
   
-  saveOutboxEvent(event: {
-    aggregateType: string;
-    aggregateId: number;
-    eventType: string;
-    payload: any;
-    status: string;
-  }, tx?: any): Promise<void>;
+  saveOutboxEvent(event: OutboxEventInput, tx?: unknown): Promise<void>;
 
   // Saga Instance Methods
-  createSagaInstance(instance: any, tx?: any): Promise<void>;
-  getSagaInstanceByCorrelationId(correlationId: string, tx?: any): Promise<any>;
-  updateSagaStatus(correlationId: string, status: string, error?: string, tx?: any): Promise<void>;
+  createSagaInstance(instance: SagaInstanceInput, tx?: unknown): Promise<void>;
+  getSagaInstanceByCorrelationId(correlationId: string, tx?: unknown): Promise<unknown>;
+  updateSagaStatus(correlationId: string, status: SagaInstanceInput["status"], error?: string, tx?: unknown): Promise<void>;
 }
