@@ -23,9 +23,29 @@ export class SendMoney {
 
   async execute(params: SendMoneyInput) {
     const correlationId = params.correlationId || uuidv4();
-    const idempotencyKey = params.idempotencyKey || `p2p_${params.senderId}_${params.receiverId}_${Date.now()}`;
+    // Improved Idempotency Key: Use a more deterministic approach if not provided
+    const idempotencyKey = params.idempotencyKey || `p2p_${params.senderId}_${params.receiverId}_${params.amount}_${correlationId}`;
+
+    // 1. Check Idempotency before starting transaction
+    const idempotencyCheck = await IdempotencyManager.checkIdempotency({ idempotencyKey, correlationId });
+    if (idempotencyCheck.isDuplicate) {
+      if (idempotencyCheck.result) return idempotencyCheck.result;
+      if (idempotencyCheck.error) throw new Error(`Previous attempt failed: ${idempotencyCheck.error}`);
+      throw new Error("Operation is already being processed.");
+    }
 
     return await TransactionManager.run(async (tx) => {
+      // 2. Mark as processing inside transaction
+      await IdempotencyManager.markProcessing({
+        idempotencyKey,
+        eventId: uuidv4(),
+        aggregateId: params.senderId,
+        aggregateType: "payment",
+        eventType: "SendMoney",
+        correlationId,
+        tx,
+      });
+
       // 1. Persistence: Get wallets
       const senderWallet = await this.paymentRepo.getWalletByUserId(params.senderId, tx);
       if (!senderWallet) throw new Error("Sender wallet not found.");
@@ -109,7 +129,17 @@ export class SendMoney {
         status: "pending",
       }, tx);
 
-      return { success: true, reference, transferId, correlationId };
+      const result = { success: true, reference, transferId, correlationId };
+
+      // 8. Mark as completed inside transaction
+      await IdempotencyManager.markCompleted({
+        idempotencyKey,
+        result,
+        correlationId,
+        tx,
+      });
+
+      return result;
     });
   }
 }

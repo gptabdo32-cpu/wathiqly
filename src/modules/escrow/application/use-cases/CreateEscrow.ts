@@ -27,7 +27,8 @@ export class CreateEscrow {
 
   async execute(params: CreateEscrowInput) {
     const correlationId = uuidv4();
-    const idempotencyKey = `escrow_init_${correlationId}`; // استخدام correlationId لضمان فرادة مفتاح Idempotency
+    // Deterministic Idempotency Key based on input parameters
+    const idempotencyKey = `escrow_init_${params.buyerId}_${params.sellerId}_${params.amount}_${correlationId}`;
 
     // 1. التحقق من Idempotency
     const idempotencyCheck = await IdempotencyManager.checkIdempotency({ idempotencyKey, correlationId });
