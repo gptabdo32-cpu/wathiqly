@@ -39,14 +39,23 @@ export class SagaManager {
         .limit(1);
 
       if (existing.length > 0) {
-        await db
+        const currentVersion = existing[0].version;
+        const result = await db
           .update(sagaStates)
           .set({
             status: params.status,
             state: validatedState,
-            updatedAt: new Date(), // Rule 10: This should ideally be injected, but DB handles it for now
+            updatedAt: new Date(),
+            version: currentVersion + 1, // Increment version for optimistic concurrency
           })
-          .where(eq(sagaStates.sagaId, params.sagaId));
+          .where(eq(sagaStates.sagaId, params.sagaId).and(eq(sagaStates.version, currentVersion)));
+
+        if (result.rowsAffected === 0) {
+          Logger.warn(`[SagaManager][CID:${params.correlationId}] Optimistic concurrency conflict for saga: ${params.sagaId}. Retrying...`);
+          // This indicates a concurrent modification. A retry mechanism or error handling should be in place.
+          // For now, we'll throw an error to indicate the conflict.
+          throw new Error(`Optimistic concurrency conflict for saga: ${params.sagaId}`);
+        }
       } else {
         await db.insert(sagaStates).values({
           sagaId: params.sagaId,

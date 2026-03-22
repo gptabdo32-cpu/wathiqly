@@ -21,6 +21,8 @@ export const sagaStates = mysqlTable("saga_states", {
   correlationId: varchar("correlationId", { length: 64 }).notNull(), // Link all events to this saga
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  version: int("version").default(1).notNull(), // For optimistic concurrency control
+
   expiresAt: timestamp("expiresAt"), // For cleanup of old sagas
 });
 
