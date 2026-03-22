@@ -126,7 +126,7 @@ export class AtomicSagaExecutor {
       sagaId,
       correlationId,
       sagaType: type,
-      operation: async () => {
+      operation: async (tx: DbTransaction) => {
         // Save the new state with optimistic concurrency control
         await SagaManager.saveState({
           sagaId,
@@ -134,7 +134,7 @@ export class AtomicSagaExecutor {
           status: newStatus,
           state: newState,
           correlationId,
-          tx: operationTx, // تمرير المعاملة
+          tx, // تمرير المعاملة
         });
 
         Logger.info(
