@@ -2,23 +2,26 @@ import { eq, and, or, lt, sql } from "drizzle-orm";
 import { outboxEvents } from "../../infrastructure/db/schema_outbox";
 import { getDb } from "../../apps/api/db";
 import { Logger } from "../../core/observability/Logger";
+import { publishToQueue } from "../../core/events/EventQueue";
 
 /**
  * OutboxWorker (Deterministic & Failure-Safe)
- * 
  * MISSION: Ensure replayable events, idempotent handlers, and deterministic failure.
+ * RULE 2: Introduce real event-driven communication
+ * RULE 18: Add correlationId across all flows
+ * RULE 19: Ensure full replayability of events
  */
 export class OutboxWorker {
   private isRunning = false;
   private intervalId: NodeJS.Timeout | null = null;
-  private readonly MAX_RETRIES = 5;
-  private readonly POLL_INTERVAL_MS = 5000;
-  private readonly RETRY_DELAY_MS = 5 * 60 * 1000; // 5 minutes
+  private readonly MAX_RETRIES = 10; // Rule 6
+  private readonly POLL_INTERVAL_MS = 2000;
+  private readonly RETRY_DELAY_MS = 30 * 1000; // 30 seconds initial backoff
 
   public start() {
     if (this.isRunning) return;
     this.isRunning = true;
-    Logger.info("OutboxWorker started (Deterministic Mode)");
+    Logger.info("OutboxWorker started (Event-Driven Mode)");
     this.intervalId = setInterval(() => this.processPendingEvents(), this.POLL_INTERVAL_MS);
   }
 
@@ -35,7 +38,7 @@ export class OutboxWorker {
     const db = await getDb();
     if (!db) return;
 
-    // Task 4: Failure Model - Retry policy
+    // Rule 6: Retry policy with status check
     const pendingEvents = await db
       .select()
       .from(outboxEvents)
@@ -44,21 +47,17 @@ export class OutboxWorker {
           eq(outboxEvents.status, "pending"),
           and(
             eq(outboxEvents.status, "failed"),
-            lt(outboxEvents.retries, this.MAX_RETRIES),
-            or(
-              sql`${outboxEvents.lastAttemptAt} IS NULL`,
-              sql`${outboxEvents.lastAttemptAt} < NOW() - INTERVAL ${this.RETRY_DELAY_MS / 1000} SECOND`
-            )
+            lt(outboxEvents.retries, this.MAX_RETRIES)
           )
         )
       )
-      .limit(10);
+      .limit(20);
 
     for (const event of pendingEvents) {
       const correlationId = event.correlationId;
       
       try {
-        // Mark as processing (Task 8: Determinism)
+        // Mark as processing (Rule 19: Determinism)
         await db.update(outboxEvents)
           .set({ 
             status: "processing", 
@@ -67,10 +66,10 @@ export class OutboxWorker {
           })
           .where(eq(outboxEvents.id, event.id));
 
-        // Task 8: Replayable events & Idempotent handlers
-        Logger.info(`Processing event: ${event.eventType}`, { correlationId, eventId: event.eventId });
+        Logger.info(`[Outbox][CID:${correlationId}] Dispatching event: ${event.eventType}`, { eventId: event.eventId });
         
-        await this.dispatch(event);
+        // RULE 3: Replace direct service calls with event publishing
+        await publishToQueue(event.eventType, event.payload, correlationId);
 
         // Mark as completed
         await db.update(outboxEvents)
@@ -81,7 +80,7 @@ export class OutboxWorker {
           })
           .where(eq(outboxEvents.id, event.id));
           
-        Logger.audit("EVENT_PROCESSED", "SYSTEM", "SUCCESS", { correlationId, eventType: event.eventType });
+        Logger.audit("EVENT_DISPATCHED", "SYSTEM", "SUCCESS", { correlationId, eventType: event.eventType });
 
       } catch (error: any) {
         const isDeadLetter = event.retries + 1 >= this.MAX_RETRIES;
@@ -95,20 +94,14 @@ export class OutboxWorker {
           })
           .where(eq(outboxEvents.id, event.id));
           
-        Logger.error(`Event processing failed: ${event.eventType}`, error, { correlationId, status });
+        Logger.error(`[Outbox][CID:${correlationId}] Dispatch failed: ${event.eventType}`, error, { status });
         
-        // Task 4: Compensation events (If status is dead_letter)
+        // RULE 7: Dead-letter queues (Handled by status "dead_letter" in DB)
         if (isDeadLetter) {
           await this.handleDeadLetter(event);
         }
       }
     }
-  }
-
-  private async dispatch(event: any) {
-    // Task 5: Event-Driven Flow
-    // In a real system, this would dispatch to an EventBus or Message Broker
-    Logger.info(`Dispatching ${event.eventType} to subscribers...`, { correlationId: event.correlationId });
   }
 
   private async handleDeadLetter(event: any) {
@@ -117,6 +110,6 @@ export class OutboxWorker {
       eventType: event.eventType,
       reason: "Max retries exceeded"
     });
-    // Emit compensation event here
+    // In a real system, we might alert devops here
   }
 }
