@@ -49,9 +49,24 @@ export const RuleSchema = z.object({
 });
 export type Rule = z.infer<typeof RuleSchema>;
 
-export const EvaluationContextSchema = z.record(z.any()).and(z.object({
+// Rule 14: Strict context typing
+export const EvaluationContextSchema = z.object({
   timestamp: z.number(),
-}));
+  escrow: z.object({
+    id: z.number(),
+    amount: z.string(),
+    status: z.string(),
+    buyerId: z.number(),
+    sellerId: z.number(),
+  }).optional(),
+  user: z.object({
+    id: z.number(),
+    role: z.string(),
+    kycStatus: z.string(),
+    isTrustedSeller: z.boolean(),
+  }).optional(),
+}).catchall(z.unknown()); // Rule 13: No any
+
 export type EvaluationContext = z.infer<typeof EvaluationContextSchema>;
 
 class RulesEngine {
@@ -74,7 +89,7 @@ class RulesEngine {
     condition: Condition,
     context: EvaluationContext
   ): boolean {
-    const contextValue = this.getNestedValue(context, condition.field);
+    const contextValue = this.getNestedValue(context as Record<string, unknown>, condition.field);
 
     if (contextValue === undefined) {
       // RULE 15: Prevent silent failures
