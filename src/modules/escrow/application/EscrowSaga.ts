@@ -17,6 +17,7 @@ export interface EscrowSagaInput {
  * MISSION: Transform into true distributed, event-driven financial engine
  * RULE 8: Store saga state in database
  * RULE 9: Convert workflows into saga state machines
+ * RULE 13: Remove all "any" types
  */
 export class EscrowSaga {
   constructor(
@@ -74,7 +75,7 @@ export class EscrowSaga {
    */
   async handlePaymentCompleted(correlationId: string, escrowLedgerAccountId: number, escrowId: number): Promise<void> {
     const sagaId = `escrow_saga_${escrowId}`;
-    const state = await SagaManager.getState<any>(sagaId);
+    const state = await SagaManager.getState<Record<string, unknown>>(sagaId);
     
     if (!state || state.status === "COMPLETED") return;
     
@@ -94,7 +95,7 @@ export class EscrowSaga {
       sagaId,
       type: "EscrowSaga",
       status: "COMPLETED",
-      state: { ...state, status: "LOCKED", step: "COMPLETED" },
+      state: { ...state, status: "LOCKED", step: "COMPLETED", escrowLedgerAccountId },
       correlationId,
     });
 
@@ -120,7 +121,7 @@ export class EscrowSaga {
    */
   async handlePaymentFailed(correlationId: string, reason: string, escrowId: number): Promise<void> {
     const sagaId = `escrow_saga_${escrowId}`;
-    const state = await SagaManager.getState<any>(sagaId);
+    const state = await SagaManager.getState<Record<string, unknown>>(sagaId);
     if (!state) return;
 
     await SagaManager.saveState({

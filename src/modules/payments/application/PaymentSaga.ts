@@ -9,6 +9,7 @@ import { SagaManager } from "../../../core/events/SagaManager";
  * MISSION: Handle payment lifecycle independently from Escrow module.
  * RULE 8: Store saga state in database
  * RULE 18: Add correlationId across all flows
+ * RULE 13: Remove all "any" types
  */
 export class PaymentSaga {
   constructor(
@@ -44,7 +45,7 @@ export class PaymentSaga {
         userId: buyerId,
         action: "PAYMENT_AUTHORIZATION_STARTED",
         entityType: "escrow",
-        entityId: escrowId,
+        entityId: String(escrowId),
         correlationId,
         metadata: { amount }
       });
@@ -75,7 +76,7 @@ export class PaymentSaga {
           event: "PaymentCompleted",
           payload: {
             escrowId,
-            transactionId: result.transactionId,
+            transactionId: result.transactionId || "unknown",
             escrowLedgerAccountId: 1001 
           },
           correlationId,
@@ -86,9 +87,9 @@ export class PaymentSaga {
           userId: buyerId,
           action: "PAYMENT_AUTHORIZATION_SUCCESS",
           entityType: "escrow",
-          entityId: escrowId,
+          entityId: String(escrowId),
           correlationId,
-          metadata: { transactionId: result.transactionId }
+          metadata: { transactionId: result.transactionId || "unknown" }
         });
       } else {
         // Rule 10: Remove "always success" logic
@@ -99,7 +100,7 @@ export class PaymentSaga {
           sagaId,
           type: "PaymentSaga",
           status: "FAILED",
-          state: { escrowId, reason: result.error, step: "FAILED" },
+          state: { escrowId, reason: result.error || "unknown", step: "FAILED" },
           correlationId,
         });
 
@@ -117,12 +118,13 @@ export class PaymentSaga {
           userId: buyerId,
           action: "PAYMENT_AUTHORIZATION_FAILED",
           entityType: "escrow",
-          entityId: escrowId,
+          entityId: String(escrowId),
           correlationId,
-          metadata: { error: result.error }
+          metadata: { error: result.error || "unknown" }
         });
       }
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error in payment saga";
       // Rule 15: Prevent silent failures
       Logger.error(`[PaymentSaga][CID:${correlationId}] CRITICAL error in payment saga`, error);
       
@@ -131,7 +133,7 @@ export class PaymentSaga {
         sagaId,
         type: "PaymentSaga",
         status: "FAILED",
-        state: { escrowId, error: error.message, step: "CRITICAL_ERROR" },
+        state: { escrowId, error: errorMessage, step: "CRITICAL_ERROR" },
         correlationId,
       });
 

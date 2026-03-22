@@ -3,6 +3,7 @@ import { z } from "zod";
 
 /**
  * Strict Event Schema (Rule 12, 18)
+ * RULE 13: Remove all "any" types
  */
 export const IntegrationEventSchema = z.object({
   eventId: z.string().uuid(),
@@ -20,7 +21,7 @@ type EventHandler<T = Record<string, unknown>> = (data: T & { correlationId: str
 
 export class EventBus {
   private static instance: EventBus;
-  private handlers: Map<string, EventHandler<any>[]> = new Map();
+  private handlers: Map<string, EventHandler<Record<string, unknown>>[]> = new Map();
 
   private constructor() {}
 
@@ -38,7 +39,8 @@ export class EventBus {
     if (!this.handlers.has(event)) {
       this.handlers.set(event, []);
     }
-    this.handlers.get(event)?.push(handler);
+    // We cast to Record<string, unknown> because the handler expects a superset of data
+    this.handlers.get(event)?.push(handler as EventHandler<Record<string, unknown>>);
     Logger.info(`[EventBus] Subscribed to event: ${event}`);
   }
 
