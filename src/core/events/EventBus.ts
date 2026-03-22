@@ -22,9 +22,11 @@ export type IntegrationEvent = z.infer<typeof IntegrationEventSchema>;
 
 // type EventHandler<T = Record<string, unknown>> = (data: T & { correlationId: string; idempotencyKey: string }) => Promise<void>;
 
+type EventHandler<T = Record<string, unknown>> = (data: T & { correlationId: string; idempotencyKey: string }) => Promise<void>;
+
 export class EventBus {
   private static instance: EventBus;
-  // private handlers: Map<string, EventHandler<Record<string, unknown>>[]> = new Map();
+  private handlers: Map<string, EventHandler<Record<string, unknown>>[]> = new Map();
 
   private constructor() {}
 
@@ -35,9 +37,56 @@ export class EventBus {
     return EventBus.instance;
   }
 
-  // public subscribe<T extends Record<string, unknown>>(event: string, handler: EventHandler<T>): void {
-  //   // ... (logic for local handlers, now deprecated for persistence)
-  // }
+  /**
+   * Subscribe to a specific event.
+   * Used by EventWorker to dispatch events to local handlers.
+   */
+  public subscribe<T extends Record<string, unknown>>(event: string, handler: EventHandler<T>): void {
+    if (!this.handlers.has(event)) {
+      this.handlers.set(event, []);
+    }
+    this.handlers.get(event)?.push(handler as EventHandler<Record<string, unknown>>);
+    Logger.info(`[EventBus] Subscribed to event: ${event}`);
+  }
+
+  /**
+   * تنفيذ المعالجات المحلية لحدث معين.
+   * يتم استدعاؤها بواسطة EventWorker.
+   */
+  public async executeHandlers(event: string, data: { 
+    payload: Record<string, unknown>; 
+    correlationId: string; 
+    idempotencyKey: string;
+  }): Promise<void> {
+    const handlers = this.handlers.get(event);
+    const correlationId = data.correlationId;
+    
+    if (!handlers || handlers.length === 0) {
+      Logger.info(`[EventBus][CID:${correlationId}] No local handlers for event: ${event}`);
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      handlers.map(async (handler) => {
+        try {
+          await handler({ 
+            ...data.payload, 
+            correlationId: data.correlationId, 
+            idempotencyKey: data.idempotencyKey 
+          });
+        } catch (error: unknown) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          Logger.error(`[EventBus][CID:${correlationId}] Handler ERROR for ${event}: ${errorMessage}`);
+          throw error;
+        }
+      })
+    );
+
+    const failures = results.filter((r) => r.status === "rejected");
+    if (failures.length > 0) {
+      throw new Error(`EventBus: ${failures.length} handlers failed for event ${event}`);
+    }
+  }
 
   /**
    * نشر حدث إلى Outbox لضمان التسليم.

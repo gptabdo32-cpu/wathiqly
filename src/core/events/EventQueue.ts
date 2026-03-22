@@ -61,7 +61,7 @@ export const eventWorker = new Worker('event-queue', async (job: Job<EventPayloa
   
   try {
     // Dispatch to existing EventBus handlers
-    await eventBus.publish(validated.event, { 
+    await eventBus.executeHandlers(validated.event, { 
       payload: validated.payload, 
       correlationId: validated.correlationId,
       idempotencyKey: validated.idempotencyKey 
