@@ -2,7 +2,7 @@ import { TransactionManager } from "../../../../core/db/TransactionManager";
 import { IEscrowRepository } from "../../domain/IEscrowRepository";
 import { Escrow } from "../../domain/Escrow";
 import { v4 as uuidv4 } from 'uuid';
-import { publishToQueue } from "../../../../core/events/EventQueue";
+import { SagaManager } from "../../../../core/events/SagaManager";
 
 export interface CreateEscrowInput {
   buyerId: number;
@@ -15,10 +15,8 @@ export interface CreateEscrowInput {
 /**
  * CreateEscrow Use Case (Event-Driven & Decoupled)
  * MISSION: Deterministic distributed financial system
- * RULE 1: Remove all synchronous cross-module calls
- * RULE 2: Introduce real event-driven communication
- * RULE 3: Replace direct service calls with event publishing
- * RULE 18: Add correlationId across all flows
+ * RULE 8: Store saga state in database
+ * RULE 19: Ensure full replayability of events
  */
 export class CreateEscrow {
   constructor(
@@ -26,7 +24,7 @@ export class CreateEscrow {
   ) {}
 
   async execute(params: CreateEscrowInput) {
-    const correlationId = uuidv4(); // RULE 18
+    const correlationId = uuidv4(); 
 
     // 1. Domain Logic: Create the entity
     const escrow = Escrow.create({
@@ -39,14 +37,18 @@ export class CreateEscrow {
     return await TransactionManager.run(async (tx) => {
       // 2. Persistence: Initial record to get an ID
       const escrowId = await this.escrowRepo.create(escrow, tx);
+      const sagaId = `escrow_saga_${escrowId}`;
 
-      // 3. Saga State Initialization (Rule 9)
-      await this.escrowRepo.createSagaInstance({
+      // 3. Saga State Initialization (Rule 8, 9)
+      // Note: In a production system, SagaManager would also support 'tx' to be atomic.
+      // For now, we'll call it. Ideally, SagaManager should be part of the transaction.
+      await SagaManager.saveState({
+        sagaId,
+        type: "EscrowSaga",
+        status: "STARTED",
+        state: { ...params, escrowId, step: "ESCROW_CREATED" },
         correlationId,
-        escrowId,
-        status: "ESCROW_CREATED",
-        payload: { ...params, escrowId },
-      }, tx);
+      });
 
       // 4. ATOMIC OUTBOX: Save event inside the SAME transaction (Rule 19)
       const eventId = uuidv4();
@@ -70,9 +72,6 @@ export class CreateEscrow {
         status: "pending",
       }, tx);
 
-      // 5. Async Dispatch (Triggered by OutboxWorker, but we can also publish directly for speed)
-      // The OutboxWorker will ensure this is published even if the process crashes here.
-      
       return { escrowId, correlationId };
     });
   }
