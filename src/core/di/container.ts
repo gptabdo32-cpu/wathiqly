@@ -7,14 +7,16 @@ import { DrizzleEscrowRepository } from "../../modules/escrow/infrastructure/Dri
 import { CreateEscrow } from "../../modules/escrow/application/use-cases/CreateEscrow";
 import { ReleaseEscrow } from "../../modules/escrow/application/use-cases/ReleaseEscrow";
 import { OpenDispute, ResolveDispute } from "../../modules/escrow/application/use-cases/DisputeUseCases";
+import { EscrowSaga } from "../../modules/escrow/application/EscrowSaga";
 
 export class Container {
   private static _ledgerService: ILedgerService = new LedgerService();
   private static _paymentService: IPaymentService = new PaymentService(this._ledgerService);
   private static _escrowRepo: IEscrowRepository = new DrizzleEscrowRepository();
+  private static _escrowSaga: EscrowSaga = new EscrowSaga(this._escrowRepo);
 
   static getCreateEscrow() {
-    return new CreateEscrow(this._paymentService, this._escrowRepo);
+    return new CreateEscrow(this._escrowRepo);
   }
 
   static getReleaseEscrow() {
@@ -39,5 +41,10 @@ export class Container {
 
   static getLedgerService(): ILedgerService {
     return this._ledgerService;
+  }
+
+  static get(type: any) {
+    if (type === EscrowSaga) return this._escrowSaga;
+    throw new Error(`Type ${type.name} not registered in Container`);
   }
 }
