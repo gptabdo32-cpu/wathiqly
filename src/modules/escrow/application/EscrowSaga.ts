@@ -5,6 +5,7 @@ import { SagaManager } from "../../../core/events/SagaManager";
 import { Logger } from "../../../core/observability/Logger";
 import { validateEvent, EventSchemas } from "../../../core/events/EventContract";
 import { z } from "zod";
+import { EscrowSagaState, SagaStatus } from "../../../core/events/SagaTypes";
 
 export interface EscrowSagaInput {
   buyerId: number;
@@ -18,16 +19,16 @@ export interface EscrowSagaInput {
  * EscrowSaga Orchestrator (Deterministic State Machine)
  * MISSION: Transform into true distributed, event-driven financial engine
  * RULE 1: Every Saga MUST be a full state machine
- * RULE 3: No Saga should end without explicit completion
- * RULE 7: Implement Saga resume logic
- * RULE 8: Add compensation flows for every failure
- * RULE 9: Enforce strict state transitions
+ * RULE 3: Typed Saga State (CRITICAL)
+ * RULE 4: Full Compensation Lifecycle
+ * RULE 10: Deterministic Time Handling
  */
 export class EscrowSaga {
   private readonly SAGA_TYPE = "EscrowSaga";
 
   constructor(
-    private escrowRepo: IEscrowRepository
+    private escrowRepo: IEscrowRepository,
+    private clock: { now: () => string } = { now: () => new Date().toISOString() }
   ) {}
 
   /**
@@ -45,21 +46,21 @@ export class EscrowSaga {
     const escrowId = await this.escrowRepo.create(escrow);
     const sagaId = `escrow_saga_${escrowId}`;
 
-    // Rule 8: Save saga state as a state machine
+    const initialState: EscrowSagaState = {
+      ...input,
+      escrowId,
+      currentStep: "INITIALIZING",
+      history: [{ step: "INITIALIZING", timestamp: this.clock.now() }]
+    };
+
     await SagaManager.saveState({
       sagaId,
       type: this.SAGA_TYPE,
       status: "STARTED",
-      state: { 
-        ...input, 
-        escrowId, 
-        currentStep: "INITIALIZING",
-        history: [{ step: "INITIALIZING", timestamp: new Date().toISOString() }]
-      },
+      state: initialState,
       correlationId,
     });
 
-    // Rule 2: Every event MUST trigger a next step
     await this.publishEvent("escrow.created", escrowId, {
       escrowId,
       buyerId: input.buyerId,
@@ -72,41 +73,39 @@ export class EscrowSaga {
   }
 
   /**
-   * Handle Payment Authorized (Next step after escrow.created -> payment.authorize.requested)
+   * Handle Payment Authorized
    */
   async handlePaymentAuthorized(correlationId: string, escrowId: number, paymentId: string): Promise<void> {
     const sagaId = `escrow_saga_${escrowId}`;
     const state = await this.ensureSagaState(sagaId, correlationId);
     
-    if (state.status === "COMPLETED" || state.currentStep === "PAYMENT_AUTHORIZED") return;
+    if (state.currentStep === "AUTHORIZED" || state.currentStep === "COMPLETED") return;
 
-    // Rule 9: Strict state transition
-    this.validateTransition(state.currentStep as string, "PAYMENT_AUTHORIZED");
+    this.validateTransition(state.currentStep, "AUTHORIZED");
 
     const escrow = await this.escrowRepo.getById(escrowId);
     if (!escrow) throw new Error(`Escrow #${escrowId} not found`);
 
-    // Update Escrow Domain
     if (escrow.canBeLocked()) {
         escrow.lock();
         await this.escrowRepo.update(escrow);
     }
 
-    // Update Saga State
+    const newState: EscrowSagaState = {
+      ...state,
+      currentStep: "AUTHORIZED",
+      paymentId,
+      history: [...state.history, { step: "AUTHORIZED", timestamp: this.clock.now() }]
+    };
+
     await SagaManager.saveState({
       sagaId,
       type: this.SAGA_TYPE,
-      status: "PROCESSING",
-      state: { 
-        ...state, 
-        currentStep: "PAYMENT_AUTHORIZED", 
-        paymentId,
-        history: [...(state.history as any[]), { step: "PAYMENT_AUTHORIZED", timestamp: new Date().toISOString() }]
-      },
+      status: "AUTHORIZED",
+      state: newState,
       correlationId,
     });
 
-    // Rule 2: Trigger next step (Capture)
     await this.publishEvent("payment.capture.requested", escrowId, {
       paymentId,
       escrowId
@@ -114,72 +113,119 @@ export class EscrowSaga {
   }
 
   /**
-   * Handle Payment Captured (Final Success Step)
+   * Handle Payment Captured
    */
   async handlePaymentCaptured(correlationId: string, escrowId: number): Promise<void> {
     const sagaId = `escrow_saga_${escrowId}`;
     const state = await this.ensureSagaState(sagaId, correlationId);
     
-    if (state.status === "COMPLETED") return;
+    if (state.currentStep === "COMPLETED") return;
+
+    this.validateTransition(state.currentStep, "COMPLETED");
+
+    const newState: EscrowSagaState = {
+      ...state,
+      currentStep: "COMPLETED",
+      history: [...state.history, { step: "COMPLETED", timestamp: this.clock.now() }]
+    };
 
     await SagaManager.saveState({
       sagaId,
       type: this.SAGA_TYPE,
       status: "COMPLETED",
-      state: { 
-        ...state, 
-        currentStep: "COMPLETED",
-        history: [...(state.history as any[]), { step: "COMPLETED", timestamp: new Date().toISOString() }]
-      },
+      state: newState,
       correlationId,
     });
 
     await this.publishEvent("escrow.saga.completed", escrowId, {
       escrowId,
       status: "LOCKED",
-      timestamp: new Date().toISOString()
+      timestamp: this.clock.now()
     }, correlationId, `saga_completed_${correlationId}`);
   }
 
   /**
-   * Handle Failure & Compensation (Rule 8)
+   * Handle Failure & Compensation (Rule 4)
    */
   async handleFailure(correlationId: string, escrowId: number, reason: string): Promise<void> {
     const sagaId = `escrow_saga_${escrowId}`;
     const state = await this.ensureSagaState(sagaId, correlationId);
     
-    if (state.status === "FAILED" || state.status === "COMPENSATING") return;
+    if (state.currentStep === "FAILED" || state.currentStep === "COMPENSATING") return;
 
     Logger.error(`[EscrowSaga][CID:${correlationId}] Failure detected: ${reason}. Starting compensation.`);
+
+    const compensatingState: EscrowSagaState = {
+      ...state,
+      failureReason: reason,
+      currentStep: "COMPENSATING",
+      history: [...state.history, { step: "COMPENSATING", timestamp: this.clock.now(), metadata: { reason } }]
+    };
 
     await SagaManager.saveState({
       sagaId,
       type: this.SAGA_TYPE,
       status: "COMPENSATING",
-      state: { ...state, failureReason: reason, currentStep: "COMPENSATING" },
+      state: compensatingState,
       correlationId,
     });
 
-    // Compensation Logic: If payment was authorized, we might need to void/refund
     if (state.paymentId) {
         await this.publishEvent("payment.refund.requested", escrowId, {
-            paymentId: state.paymentId as string,
+            paymentId: state.paymentId,
             reason: `Saga Failure: ${reason}`
         }, correlationId, `compensation_refund_${correlationId}`);
+    } else {
+        // No payment to refund, move directly to FAILED
+        await this.markAsFailed(correlationId, escrowId, reason, compensatingState);
     }
+  }
 
-    // Mark as FAILED after compensation triggers
+  /**
+   * Handle Compensation Completed (Rule 4)
+   */
+  async handleCompensated(correlationId: string, escrowId: number): Promise<void> {
+    const sagaId = `escrow_saga_${escrowId}`;
+    const state = await this.ensureSagaState(sagaId, correlationId);
+    
+    if (state.currentStep === "COMPENSATED") return;
+
+    const compensatedState: EscrowSagaState = {
+      ...state,
+      currentStep: "COMPENSATED",
+      history: [...state.history, { step: "COMPENSATED", timestamp: this.clock.now() }]
+    };
+
     await SagaManager.saveState({
-        sagaId,
-        type: this.SAGA_TYPE,
-        status: "FAILED",
-        state: { ...state, status: "FAILED", currentStep: "FAILED" },
-        correlationId,
+      sagaId,
+      type: this.SAGA_TYPE,
+      status: "COMPENSATED",
+      state: compensatedState,
+      correlationId,
+    });
+
+    await this.markAsFailed(correlationId, escrowId, state.failureReason || "Compensated", compensatedState);
+  }
+
+  private async markAsFailed(correlationId: string, escrowId: number, reason: string, currentState: EscrowSagaState): Promise<void> {
+    const sagaId = `escrow_saga_${escrowId}`;
+    const failedState: EscrowSagaState = {
+      ...currentState,
+      currentStep: "FAILED",
+      history: [...currentState.history, { step: "FAILED", timestamp: this.clock.now() }]
+    };
+
+    await SagaManager.saveState({
+      sagaId,
+      type: this.SAGA_TYPE,
+      status: "FAILED",
+      state: failedState,
+      correlationId,
     });
   }
 
-  private async ensureSagaState(sagaId: string, correlationId: string): Promise<Record<string, unknown>> {
-    const state = await SagaManager.getState<Record<string, unknown>>(sagaId);
+  private async ensureSagaState(sagaId: string, correlationId: string): Promise<EscrowSagaState> {
+    const state = await SagaManager.getState<EscrowSagaState>(sagaId);
     if (!state) {
         throw new Error(`[EscrowSaga][CID:${correlationId}] Saga state not found for ${sagaId}`);
     }
@@ -188,9 +234,10 @@ export class EscrowSaga {
 
   private validateTransition(current: string, next: string) {
     const allowed: Record<string, string[]> = {
-        "INITIALIZING": ["PAYMENT_AUTHORIZED", "FAILED"],
-        "PAYMENT_AUTHORIZED": ["COMPLETED", "FAILED"],
-        "COMPENSATING": ["FAILED"]
+        "INITIALIZING": ["AUTHORIZED", "FAILED", "COMPENSATING"],
+        "AUTHORIZED": ["COMPLETED", "COMPENSATING", "FAILED"],
+        "COMPENSATING": ["COMPENSATED", "FAILED"],
+        "COMPENSATED": ["FAILED"]
     };
     if (!allowed[current]?.includes(next)) {
         throw new Error(`Invalid state transition from ${current} to ${next}`);
@@ -212,11 +259,10 @@ export class EscrowSaga {
         aggregateId,
         version: 1,
         correlationId,
-        timestamp: new Date().toISOString(),
+        timestamp: this.clock.now(),
         idempotencyKey
     };
 
-    // Rule 18: Schema validation
     const validated = validateEvent(type, header, payload);
 
     await this.escrowRepo.saveOutboxEvent({

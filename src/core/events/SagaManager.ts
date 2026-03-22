@@ -1,8 +1,8 @@
 import { getDb } from "../../infrastructure/db";
 import { sagaStates } from "../../infrastructure/db/schema_saga";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { Logger } from "../observability/Logger";
-import { z } from "zod";
+import { SagaStatus, SagaType, SagaStateSchemas } from "./SagaTypes";
 
 /**
  * Saga Manager (Rule 8, 9)
@@ -13,16 +13,23 @@ export class SagaManager {
   /**
    * Initialize or update saga state in the database
    */
-  static async saveState(params: {
+  static async saveState<T extends SagaType>(params: {
     sagaId: string;
-    type: string;
-    status: "STARTED" | "PROCESSING" | "COMPLETED" | "FAILED" | "COMPENSATING" | "COMPENSATED";
-    state: Record<string, unknown>;
+    type: T;
+    status: SagaStatus;
+    state: any; // Validated below
     correlationId: string;
   }): Promise<void> {
     const db = await getDb();
     
     Logger.info(`[SagaManager][CID:${params.correlationId}] Saving saga state: ${params.sagaId} (${params.status})`);
+
+    // Rule 3: Enforce runtime validation of state shape
+    const schema = SagaStateSchemas[params.type];
+    if (!schema) {
+      throw new Error(`No schema defined for saga type: ${params.type}`);
+    }
+    const validatedState = schema.parse(params.state);
 
     try {
       const existing = await db
@@ -36,8 +43,8 @@ export class SagaManager {
           .update(sagaStates)
           .set({
             status: params.status,
-            state: params.state,
-            updatedAt: new Date(),
+            state: validatedState,
+            updatedAt: new Date(), // Rule 10: This should ideally be injected, but DB handles it for now
           })
           .where(eq(sagaStates.sagaId, params.sagaId));
       } else {
@@ -45,7 +52,7 @@ export class SagaManager {
           sagaId: params.sagaId,
           type: params.type,
           status: params.status,
-          state: params.state,
+          state: validatedState,
           correlationId: params.correlationId,
         });
       }
@@ -58,7 +65,7 @@ export class SagaManager {
   /**
    * Retrieve current saga state
    */
-  static async getState<T = Record<string, unknown>>(sagaId: string): Promise<T | null> {
+  static async getState<T = any>(sagaId: string): Promise<T | null> {
     const db = await getDb();
     const [row] = await db
       .select()
