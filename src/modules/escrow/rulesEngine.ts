@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 /**
  * Rules Engine for Smart Escrow (Hardened & Strict)
  * MISSION: Deterministic distributed financial system
@@ -6,55 +8,57 @@
  * RULE 15: Prevent silent failures
  */
 
-export type ComparisonOperator = "eq" | "ne" | "gt" | "gte" | "lt" | "lte" | "in" | "contains";
-export type LogicalOperator = "AND" | "OR";
+export const ComparisonOperatorSchema = z.enum(["eq", "ne", "gt", "gte", "lt", "lte", "in", "contains"]);
+export type ComparisonOperator = z.infer<typeof ComparisonOperatorSchema>;
 
-export interface Rule {
-  id: string;
-  name: string;
-  description?: string;
-  conditions: Condition[];
-  logicalOperator: LogicalOperator;
-  action: RuleAction;
-  enabled: boolean;
-  createdAt: number;
-}
+export const LogicalOperatorSchema = z.enum(["AND", "OR"]);
+export type LogicalOperator = z.infer<typeof LogicalOperatorSchema>;
 
-export type ConditionValue = string | number | boolean | string[] | number[];
+export const ConditionValueSchema = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.array(z.string()),
+  z.array(z.number())
+]);
+export type ConditionValue = z.infer<typeof ConditionValueSchema>;
 
-export interface Condition {
-  field: string;
-  operator: ComparisonOperator;
-  value: ConditionValue;
-  type: "string" | "number" | "boolean" | "array";
-}
+export const ConditionSchema = z.object({
+  field: z.string(),
+  operator: ComparisonOperatorSchema,
+  value: ConditionValueSchema,
+  type: z.enum(["string", "number", "boolean", "array"]),
+});
+export type Condition = z.infer<typeof ConditionSchema>;
 
-export interface RuleAction {
-  type: "release_funds" | "trigger_dispute" | "send_notification" | "update_status";
-  payload?: Record<string, string | number | boolean>;
-}
+export const RuleActionSchema = z.object({
+  type: z.enum(["release_funds", "trigger_dispute", "send_notification", "update_status"]),
+  payload: z.record(z.union([z.string(), z.number(), z.boolean()])).optional(),
+});
+export type RuleAction = z.infer<typeof RuleActionSchema>;
 
-export interface EvaluationContext {
-  temperature?: number;
-  humidity?: number;
-  location?: {
-    latitude: number;
-    longitude: number;
-  };
-  targetLocation?: {
-    latitude: number;
-    longitude: number;
-    radius: number;
-  };
-  status?: string;
-  timestamp: number; // Mandatory for determinism
-  [key: string]: string | number | boolean | object | undefined;
-}
+export const RuleSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  description: z.string().optional(),
+  conditions: z.array(ConditionSchema),
+  logicalOperator: LogicalOperatorSchema,
+  action: RuleActionSchema,
+  enabled: z.boolean(),
+  createdAt: z.number(),
+});
+export type Rule = z.infer<typeof RuleSchema>;
+
+export const EvaluationContextSchema = z.record(z.any()).and(z.object({
+  timestamp: z.number(),
+}));
+export type EvaluationContext = z.infer<typeof EvaluationContextSchema>;
 
 class RulesEngine {
   private rules: Map<string, Rule> = new Map();
 
-  registerRule(rule: Rule): void {
+  registerRule(ruleData: unknown): void {
+    const rule = RuleSchema.parse(ruleData);
     this.rules.set(rule.id, rule);
   }
 
@@ -97,24 +101,26 @@ class RulesEngine {
         return Number(contextValue) <= Number(condition.value);
 
       case "in":
-        return Array.isArray(condition.value) &&
-          (condition.value as any[]).includes(contextValue);
+        if (!Array.isArray(condition.value)) return false;
+        return (condition.value as (string | number)[]).includes(contextValue as string | number);
 
       case "contains":
         return String(contextValue).includes(String(condition.value));
 
       default:
-        throw new Error(`Rule Evaluation Error: Unknown operator '${condition.operator}'`);
+        const _exhaustiveCheck: never = condition.operator;
+        throw new Error(`Rule Evaluation Error: Unknown operator '${_exhaustiveCheck}'`);
     }
   }
 
   private getNestedValue(obj: Record<string, unknown>, path: string): unknown {
     const keys = path.split(".");
-    let value: any = obj;
+    let value: unknown = obj;
 
     for (const key of keys) {
-      value = value?.[key];
-      if (value === undefined) {
+      if (value && typeof value === 'object' && key in (value as object)) {
+        value = (value as Record<string, unknown>)[key];
+      } else {
         return undefined;
       }
     }
@@ -171,41 +177,6 @@ class RulesEngine {
     return this.evaluateAllRules(context)
       .filter((result) => result.matched)
       .map((result) => result.rule);
-  }
-
-  static isWithinGeofence(
-    currentLocation: { latitude: number; longitude: number },
-    targetLocation: { latitude: number; longitude: number; radius: number }
-  ): boolean {
-    const distance = this.calculateDistance(
-      currentLocation.latitude,
-      currentLocation.longitude,
-      targetLocation.latitude,
-      targetLocation.longitude
-    );
-
-    return distance <= targetLocation.radius;
-  }
-
-  static calculateDistance(
-    lat1: number,
-    lon1: number,
-    lat2: number,
-    lon2: number
-  ): number {
-    const R = 6371000;
-    const dLat = ((lat2 - lat1) * Math.PI) / 180;
-    const dLon = ((lon2 - lon1) * Math.PI) / 180;
-
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos((lat1 * Math.PI) / 180) *
-        Math.cos((lat2 * Math.PI) / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
-
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
   }
 }
 
