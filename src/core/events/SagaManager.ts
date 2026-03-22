@@ -3,6 +3,7 @@ import { sagaStates } from "../../infrastructure/db/schema_saga";
 import { eq, and } from "drizzle-orm";
 import { Logger } from "../observability/Logger";
 import { SagaStatus, SagaType, SagaStateSchemas } from "./SagaTypes";
+import { DbTransaction } from "../db/TransactionManager"; // استيراد DbTransaction
 
 /**
  * Saga Manager (Rule 8, 9)
@@ -23,7 +24,7 @@ export class SagaManager {
     status: SagaStatus;
     state: any;
     correlationId: string;
-    tx?: any; // Support for external transactions
+    tx?: DbTransaction; // إضافة tx اختياريًا
   }): Promise<void> {
     const db = params.tx || (await getDb());
     

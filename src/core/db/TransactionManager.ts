@@ -3,22 +3,14 @@ import { DatabaseError, TransactionError } from "../errors/errors";
 import { MySqlTransaction } from "drizzle-orm/mysql2";
 import { Logger } from "../observability/Logger";
 
-/**
- * TransactionManager
- * Phase 3.5: Ensures all financial operations are Atomic.
- * Provides a unified way to run database transactions across different modules.
- * RULE 13: Remove all "any" types
- * RULE 15: Prevent silent failures
- * RULE 20: Validate system under failure scenarios
- */
 export type DbTransaction = MySqlTransaction<any, any>;
 
+export interface TransactionContext {
+  tx: DbTransaction;
+}
+
 export class TransactionManager {
-  /**
-   * Run a set of operations within a database transaction.
-   * @param callback The operations to perform within the transaction.
-   */
-  static async run<T>(callback: (tx: DbTransaction) => Promise<T>): Promise<T> {
+  static async run<T>(callback: (context: TransactionContext) => Promise<T>): Promise<T> {
     const db = await getDb();
     if (!db) {
       throw new DatabaseError("Database connection not available for transaction");
@@ -26,10 +18,11 @@ export class TransactionManager {
 
     try {
       return await db.transaction(async (tx) => {
+        const context: TransactionContext = { tx };
         try {
-          return await callback(tx);
+          const result = await callback(context);
+          return result;
         } catch (error: unknown) {
-          // If it's already an AppError, rethrow it to preserve context
           const err = error as { code?: string; message: string };
           if (err.code) throw error;
           
@@ -41,7 +34,7 @@ export class TransactionManager {
       const err = error as { code?: string; message: string };
       if (err.code) throw error;
       
-      Logger.error("[TransactionManager] Transaction failed", error);
+      Logger.error("[TransactionManager] Transaction execution failed", error);
       throw new TransactionError("Transaction execution failed", error instanceof Error ? error : new Error(String(error)));
     }
   }

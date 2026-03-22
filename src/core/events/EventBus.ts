@@ -1,5 +1,8 @@
 import { Logger } from "../observability/Logger";
 import { z } from "zod";
+import { DbTransaction } from "../db/TransactionManager";
+import { outboxEvents } from "../../infrastructure/db/schema_outbox";
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Strict Event Schema (Rule 12, 18)
@@ -17,11 +20,11 @@ export const IntegrationEventSchema = z.object({
 
 export type IntegrationEvent = z.infer<typeof IntegrationEventSchema>;
 
-type EventHandler<T = Record<string, unknown>> = (data: T & { correlationId: string; idempotencyKey: string }) => Promise<void>;
+// type EventHandler<T = Record<string, unknown>> = (data: T & { correlationId: string; idempotencyKey: string }) => Promise<void>;
 
 export class EventBus {
   private static instance: EventBus;
-  private handlers: Map<string, EventHandler<Record<string, unknown>>[]> = new Map();
+  // private handlers: Map<string, EventHandler<Record<string, unknown>>[]> = new Map();
 
   private constructor() {}
 
@@ -32,65 +35,46 @@ export class EventBus {
     return EventBus.instance;
   }
 
-  /**
-   * Subscribe to a specific event.
-   */
-  public subscribe<T extends Record<string, unknown>>(event: string, handler: EventHandler<T>): void {
-    if (!this.handlers.has(event)) {
-      this.handlers.set(event, []);
-    }
-    // We cast to Record<string, unknown> because the handler expects a superset of data
-    this.handlers.get(event)?.push(handler as EventHandler<Record<string, unknown>>);
-    Logger.info(`[EventBus] Subscribed to event: ${event}`);
-  }
+  // public subscribe<T extends Record<string, unknown>>(event: string, handler: EventHandler<T>): void {
+  //   // ... (logic for local handlers, now deprecated for persistence)
+  // }
 
   /**
-   * Publish an event to all local subscribers.
-   * Rule 15: Prevent silent failures
+   * نشر حدث إلى Outbox لضمان التسليم.
+   * يجب أن يتم استدعاء هذه الوظيفة داخل معاملة قاعدة بيانات.
    */
-  public async publish(event: string, data: { 
-    payload: Record<string, unknown>; 
-    correlationId: string; 
+  public async publish(event: string, data: {
+    payload: Record<string, unknown>;
+    correlationId: string;
     idempotencyKey: string;
     eventId?: string;
-  }): Promise<void> {
-    const handlers = this.handlers.get(event);
-    const correlationId = data.correlationId;
-    
-    if (!handlers || handlers.length === 0) {
-      Logger.info(`[EventBus][CID:${correlationId}] No local handlers for event: ${event}`);
-      return;
-    }
+    aggregateType?: string;
+    aggregateId?: string | number;
+  }, tx: DbTransaction): Promise<void> {
+    const eventId = data.eventId || uuidv4();
+    const timestamp = new Date().toISOString();
 
-    Logger.info(`[EventBus][CID:${correlationId}] Publishing event: ${event}`, {
-        eventId: data.eventId,
+    Logger.info(`[EventBus][CID:${data.correlationId}] Publishing event to Outbox: ${event}`, {
+        eventId,
         type: event,
-        timestamp: new Date().toISOString()
+        timestamp,
     });
 
-    // Execute all handlers with tracing
-    const results = await Promise.allSettled(
-      handlers.map(async (handler) => {
-        try {
-          await handler({ 
-            ...data.payload, 
-            correlationId: data.correlationId, 
-            idempotencyKey: data.idempotencyKey 
-          });
-          Logger.info(`[EventBus][CID:${correlationId}] Handler SUCCESS for ${event}`);
-        } catch (error: unknown) {
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          Logger.error(`[EventBus][CID:${correlationId}] Handler ERROR for ${event}: ${errorMessage}`);
-          throw error; // Re-throw to be caught by Promise.allSettled
-        }
-      })
-    );
+    await tx.insert(outboxEvents).values({
+      eventId,
+      aggregateType: data.aggregateType || "unknown", // يجب تحديد نوع التجميع المناسب هنا
+      aggregateId: String(data.aggregateId || "unknown"),   // يجب تحديد معرف التجميع المناسب هنا
+      eventType: event,
+      version: 1,
+      payload: data.payload,
+      correlationId: data.correlationId,
+      idempotencyKey: data.idempotencyKey,
+      status: "pending",
+      createdAt: new Date(),
+      retries: 0,
+    });
 
-    const failures = results.filter((r) => r.status === "rejected");
-    if (failures.length > 0) {
-      // Rule 15: No silent failures
-      throw new Error(`EventBus: ${failures.length} handlers failed for event ${event}`);
-    }
+    Logger.info(`[EventBus][CID:${data.correlationId}] Event ${event} added to Outbox successfully.`);
   }
 }
 

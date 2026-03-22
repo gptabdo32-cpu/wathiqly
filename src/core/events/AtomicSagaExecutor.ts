@@ -2,7 +2,7 @@ import { Logger } from '../observability/Logger';
 import { DistributedLock } from '../locking/DistributedLock';
 import { SagaManager } from './SagaManager';
 import { SagaStatus, SagaType } from './SagaTypes';
-import { getDb } from '../../infrastructure/db';
+import { TransactionManager, DbTransaction } from "../db/TransactionManager"; // استيراد TransactionManager و DbTransaction
 
 /**
  * Atomic Saga Executor (Improvements 1, 2, 10, 17)
@@ -40,7 +40,7 @@ export class AtomicSagaExecutor {
   static async execute<T>(params: {
     sagaId: string;
     correlationId: string;
-    operation: (tx?: any) => Promise<T>;
+    operation: (tx: DbTransaction) => Promise<T>; // تغيير التوقيع لقبول DbTransaction
     sagaType?: string;
   }): Promise<T> {
     const { sagaId, correlationId, operation, sagaType = 'Unknown' } = params;
@@ -59,9 +59,8 @@ export class AtomicSagaExecutor {
           correlationId,
           async () => {
             // Improvement 8: Enforce Outbox + DB transaction atomicity
-            const db = await getDb();
-            return await db.transaction(async (tx) => {
-              return await operation(tx);
+            return await TransactionManager.run(async (context) => {
+              return await operation(context.tx);
             });
           },
           30000 // 30 second TTL
@@ -119,8 +118,9 @@ export class AtomicSagaExecutor {
     newStatus: SagaStatus;
     newState: any;
     correlationId: string;
+    tx?: DbTransaction; // إضافة tx اختياريًا هنا أيضًا
   }): Promise<void> {
-    const { sagaId, type, newStatus, newState, correlationId } = params;
+    const { sagaId, type, newStatus, newState, correlationId, tx } = params;
 
     await this.execute({
       sagaId,
@@ -134,6 +134,7 @@ export class AtomicSagaExecutor {
           status: newStatus,
           state: newState,
           correlationId,
+          tx: operationTx, // تمرير المعاملة
         });
 
         Logger.info(
