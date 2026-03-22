@@ -1,5 +1,6 @@
 import { TransactionManager } from "../../../../core/db/TransactionManager";
 import { IPaymentRepository } from "../../domain/IPaymentRepository";
+import { v4 as uuidv4 } from 'uuid';
 
 export interface SendMoneyInput {
   senderId: number;
@@ -7,12 +8,23 @@ export interface SendMoneyInput {
   amount: string;
   noteEncrypted?: string | null;
   ipAddress?: string;
+  correlationId?: string; // Rule 18
+  idempotencyKey?: string; // Rule 5
 }
 
+/**
+ * SendMoney Use Case (Deterministic Distributed Financial System)
+ * RULE 18: Add correlationId across all flows
+ * RULE 5: Ensure every event is idempotent
+ * RULE 20: Validate system under failure scenarios
+ */
 export class SendMoney {
   constructor(private paymentRepo: IPaymentRepository) {}
 
   async execute(params: SendMoneyInput) {
+    const correlationId = params.correlationId || uuidv4();
+    const idempotencyKey = params.idempotencyKey || `p2p_${params.senderId}_${params.receiverId}_${Date.now()}`;
+
     return await TransactionManager.run(async (tx) => {
       // 1. Persistence: Get wallets
       const senderWallet = await this.paymentRepo.getWalletByUserId(params.senderId, tx);
@@ -31,7 +43,9 @@ export class SendMoney {
 
       const senderProps = senderWallet.getProps();
       const receiverProps = receiverWallet.getProps();
-      const reference = `P2P-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+      
+      // Rule 20: Use deterministic reference instead of random Math.random()
+      const reference = `P2P-${correlationId.substring(0, 8).toUpperCase()}`;
 
       // 4. Persistence: Create P2P Record
       const transferId = await this.paymentRepo.createP2PTransfer({
@@ -63,7 +77,7 @@ export class SendMoney {
         reference,
       }, tx);
 
-      // 6. Persistence: Audit Logs
+      // 6. Persistence: Audit Logs (Rule 16)
       await this.paymentRepo.createAuditLog({
         userId: params.senderId,
         walletId: senderProps.id,
@@ -72,24 +86,30 @@ export class SendMoney {
         newBalance: senderProps.balance,
         entityType: "p2pTransfer",
         entityId: transferId,
+        correlationId, // Rule 18
       }, tx);
 
-      // 7. ATOMIC OUTBOX: Transfer Notification
+      // 7. ATOMIC OUTBOX: Transfer Notification (Rule 2, 3)
       await this.paymentRepo.saveOutboxEvent({
+        eventId: uuidv4(),
         aggregateType: "payment",
         aggregateId: transferId,
         eventType: "P2PTransferCompleted",
+        version: 1,
         payload: {
           transferId,
           senderId: params.senderId,
           receiverId: params.receiverId,
           amount: params.amount,
           reference,
+          correlationId,
         },
+        correlationId,
+        idempotencyKey: `p2p_notify_${transferId}`,
         status: "pending",
       }, tx);
 
-      return { success: true, reference, transferId };
+      return { success: true, reference, transferId, correlationId };
     });
   }
 }

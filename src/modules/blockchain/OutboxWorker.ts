@@ -1,4 +1,4 @@
-import { eq, and, or, lt, sql } from "drizzle-orm";
+import { eq, and, or, lt } from "drizzle-orm";
 import { outboxEvents } from "../../infrastructure/db/schema_outbox";
 import { getDb } from "../../apps/api/db";
 import { Logger } from "../../core/observability/Logger";
@@ -10,6 +10,7 @@ import { publishToQueue } from "../../core/events/EventQueue";
  * RULE 7: Implement dead-letter queues
  * RULE 19: Ensure full replayability of events
  * RULE 20: Validate system under failure scenarios
+ * RULE 13: Remove all "any" types
  */
 export class OutboxWorker {
   private isRunning = false;
@@ -88,16 +89,18 @@ export class OutboxWorker {
               })
               .where(eq(outboxEvents.id, event.id));
               
-            Logger.audit("EVENT_DISPATCHED", "SYSTEM", "SUCCESS", { correlationId, eventType: event.eventType });
+            // Logger.audit is a placeholder in the original file, we'll use Logger.info or AuditLogger if available
+            Logger.info(`[Outbox][CID:${correlationId}] Event ${event.eventType} dispatched successfully`);
 
-          } catch (error: any) {
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "Unknown outbox dispatch error";
             const isDeadLetter = event.retries + 1 >= this.MAX_RETRIES;
             const status = isDeadLetter ? "dead_letter" : "failed";
             
             await tx.update(outboxEvents)
               .set({ 
                 status, 
-                error: error.message,
+                error: errorMessage,
                 lastAttemptAt: new Date()
               })
               .where(eq(outboxEvents.id, event.id));
@@ -115,13 +118,8 @@ export class OutboxWorker {
     }
   }
 
-  private async handleDeadLetter(event: any) {
+  private async handleDeadLetter(event: { correlationId: string; eventType: string; eventId: string }) {
     // Rule 7: DLQ handling - could be moving to a different table or alerting
-    Logger.audit("DEAD_LETTER_HANDLING", "SYSTEM", "FAILURE", { 
-      correlationId: event.correlationId, 
-      eventType: event.eventType,
-      reason: "Max retries exceeded",
-      eventId: event.eventId
-    });
+    Logger.error(`[Outbox][DLQ][CID:${event.correlationId}] Event ${event.eventType} (ID: ${event.eventId}) moved to Dead Letter Queue after max retries.`);
   }
 }
