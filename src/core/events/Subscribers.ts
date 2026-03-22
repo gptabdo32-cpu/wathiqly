@@ -35,7 +35,7 @@ export function initializeSubscribers() {
         correlationId,
         idempotencyKey: `lock_funds_${data.escrowId}_${correlationId}`
       });
-    } catch (error) {
+    } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error triggering payment";
       Logger.error(`[Saga][CID:${correlationId}] Failed to trigger Payment: ${errorMessage}`);
       throw error; // Rule 15: Prevent silent failures
