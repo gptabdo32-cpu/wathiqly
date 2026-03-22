@@ -4,6 +4,7 @@ import { Logger } from "../../../core/observability/Logger";
 /**
  * StripePaymentProvider (Rule 11: Real payment provider abstraction)
  * MISSION: Replace fake payment logic with real provider integration.
+ * RULE 13: Remove all "any" types
  */
 export class StripePaymentProvider implements IPaymentProvider {
   /**
@@ -40,9 +41,10 @@ export class StripePaymentProvider implements IPaymentProvider {
         transactionId: `pi_${Math.random().toString(36).substring(7)}`,
         metadata: { provider: "stripe", idempotencyKey: params.idempotencyKey }
       };
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown payment provider error";
       // Rule 15: Prevent silent failures
-      Logger.error(`[Stripe] API Error: ${error.message}`);
+      Logger.error(`[Stripe] API Error: ${errorMessage}`);
       return { success: false, error: "Payment provider communication error" };
     }
   }
@@ -54,7 +56,11 @@ export class StripePaymentProvider implements IPaymentProvider {
     idempotencyKey: string;
   }): Promise<PaymentProviderResult> {
     Logger.info(`[Stripe][Idempotency:${params.idempotencyKey}] Refunding transaction ${params.transactionId}`);
-    return { success: true, transactionId: `re_${Math.random().toString(36).substring(7)}` };
+    return { 
+      success: true, 
+      transactionId: `re_${Math.random().toString(36).substring(7)}`,
+      metadata: { provider: "stripe", idempotencyKey: params.idempotencyKey }
+    };
   }
 
   async transfer(params: {
@@ -65,6 +71,10 @@ export class StripePaymentProvider implements IPaymentProvider {
     idempotencyKey: string;
   }): Promise<PaymentProviderResult> {
     Logger.info(`[Stripe][Idempotency:${params.idempotencyKey}] Transferring ${params.amount} to ${params.destinationId}`);
-    return { success: true, transactionId: `tr_${Math.random().toString(36).substring(7)}` };
+    return { 
+      success: true, 
+      transactionId: `tr_${Math.random().toString(36).substring(7)}`,
+      metadata: { provider: "stripe", idempotencyKey: params.idempotencyKey }
+    };
   }
 }

@@ -1,8 +1,14 @@
+/**
+ * Real Payment Provider Abstraction (Rule 11)
+ * MISSION: Transform the system into a true distributed, event-driven financial engine
+ * RULE 13: Remove all "any" types
+ */
+
 export interface PaymentProviderResult {
   success: boolean;
   transactionId?: string;
   error?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>; // Rule 13: No any
 }
 
 /**
