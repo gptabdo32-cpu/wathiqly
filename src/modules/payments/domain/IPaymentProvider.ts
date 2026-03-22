@@ -17,13 +17,22 @@ export interface PaymentProviderResult {
  */
 export interface IPaymentProvider {
   /**
-   * Authorize and capture funds (or just authorize for escrow)
+   * Authorize funds (Hold funds on buyer's card)
    */
   authorize(params: {
     amount: string;
     currency: string;
     sourceId: string;
-    description: string;
+    description?: string;
+    idempotencyKey: string;
+  }): Promise<PaymentProviderResult>;
+
+  /**
+   * Capture previously authorized funds
+   */
+  capture(params: {
+    paymentId: string;
+    amount?: string;
     idempotencyKey: string;
   }): Promise<PaymentProviderResult>;
 
