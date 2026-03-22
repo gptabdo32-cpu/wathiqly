@@ -1,10 +1,10 @@
 import { eventBus } from "./EventBus";
-import { EventType } from "./EventTypes";
 import { Logger } from "../observability/Logger";
 import { Container } from "../di/container";
 import { EscrowSaga } from "../../modules/escrow/application/EscrowSaga";
 import { PaymentSaga } from "../../modules/payments/application/PaymentSaga";
 import { StripePaymentProvider } from "../../modules/payments/infrastructure/StripePaymentProvider";
+import { publishToQueue } from "./EventQueue";
 
 /**
  * Initialize all system-wide subscribers.
@@ -21,19 +21,22 @@ export function initializeSubscribers() {
     const correlationId = data.correlationId;
     Logger.info(`[Saga][CID:${correlationId}] Reacting to EscrowCreated. Triggering Payment...`);
     
-    // In a real system, this would be a separate microservice listening to the queue.
-    // Here we use the EventBus as a local dispatcher for the Saga.
     try {
-      // RULE 11: Integrate real payment provider abstraction (Simulated via Ledger)
-      // We emit a command/event for the Payment module
-      await eventBus.publish("LockFundsCommand", {
-        escrowId: data.escrowId,
-        buyerId: data.buyerId,
-        amount: data.amount,
-        correlationId
+      // RULE 3: Replace direct service calls with event publishing
+      // RULE 4: Implement message queue (Publish to queue instead of direct bus)
+      await publishToQueue({
+        event: "LockFundsCommand",
+        payload: {
+          escrowId: data.escrowId,
+          buyerId: data.buyerId,
+          amount: data.amount,
+        },
+        correlationId,
+        idempotencyKey: `lock_funds_${data.escrowId}_${correlationId}`
       });
     } catch (error: any) {
       Logger.error(`[Saga][CID:${correlationId}] Failed to trigger Payment`, error);
+      throw error; // Rule 15: Prevent silent failures
     }
   });
 

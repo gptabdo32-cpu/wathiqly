@@ -1,7 +1,7 @@
 import { IPaymentProvider } from "../domain/IPaymentProvider";
 import { Logger } from "../../../core/observability/Logger";
-import { eventBus } from "../../../core/events/EventBus";
 import { AuditLogger } from "../../../core/audit/AuditLogger";
+import { publishToQueue } from "../../../core/events/EventQueue";
 
 /**
  * PaymentSaga (Rule 9: Convert workflows into saga state machines)
@@ -49,11 +49,16 @@ export class PaymentSaga {
         Logger.info(`[PaymentSaga][CID:${correlationId}] Payment authorized successfully: ${result.transactionId}`);
         
         // Rule 3: Replace direct service calls with event publishing
-        await eventBus.publish("PaymentCompleted", {
+        // Rule 4: Implement message queue
+        await publishToQueue({
+          event: "PaymentCompleted",
+          payload: {
+            escrowId,
+            transactionId: result.transactionId,
+            escrowLedgerAccountId: 1001 // Simulated ledger account for now
+          },
           correlationId,
-          escrowId,
-          transactionId: result.transactionId,
-          escrowLedgerAccountId: 1001 // Simulated ledger account for now
+          idempotencyKey: `pay_comp_${escrowId}_${correlationId}`
         });
 
         await AuditLogger.log({
@@ -68,10 +73,14 @@ export class PaymentSaga {
         // Rule 10: Remove "always success" logic
         Logger.error(`[PaymentSaga][CID:${correlationId}] Payment authorization failed: ${result.error}`);
         
-        await eventBus.publish("PaymentFailed", {
+        await publishToQueue({
+          event: "PaymentFailed",
+          payload: {
+            escrowId,
+            reason: result.error || "Payment provider rejected transaction"
+          },
           correlationId,
-          escrowId,
-          reason: result.error || "Payment provider rejected transaction"
+          idempotencyKey: `pay_fail_${escrowId}_${correlationId}`
         });
 
         await AuditLogger.log({
@@ -87,11 +96,17 @@ export class PaymentSaga {
       // Rule 15: Prevent silent failures
       Logger.error(`[PaymentSaga][CID:${correlationId}] CRITICAL error in payment saga`, error);
       
-      await eventBus.publish("PaymentFailed", {
+      await publishToQueue({
+        event: "PaymentFailed",
+        payload: {
+          escrowId,
+          reason: "Internal payment processing error"
+        },
         correlationId,
-        escrowId,
-        reason: "Internal payment processing error"
+        idempotencyKey: `pay_crit_${escrowId}_${correlationId}`
       });
+      
+      throw error; // Re-throw for BullMQ retry
     }
   }
 }
