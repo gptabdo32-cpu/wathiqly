@@ -8,7 +8,7 @@ import { z } from "zod";
 export const IntegrationEventSchema = z.object({
   eventId: z.string().uuid(),
   type: z.string(),
-  timestamp: z.date(),
+  timestamp: z.string(), // ISO String
   correlationId: z.string().uuid(),
   idempotencyKey: z.string(),
   payload: z.record(z.unknown()), // Rule 13: No any
@@ -78,8 +78,9 @@ export class EventBus {
             idempotencyKey: data.idempotencyKey 
           });
           Logger.info(`[EventBus][CID:${correlationId}] Handler SUCCESS for ${event}`);
-        } catch (error) {
-          Logger.error(`[EventBus][CID:${correlationId}] Handler ERROR for ${event}:`, error);
+        } catch (error: unknown) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          Logger.error(`[EventBus][CID:${correlationId}] Handler ERROR for ${event}: ${errorMessage}`);
           throw error; // Re-throw to be caught by Promise.allSettled
         }
       })

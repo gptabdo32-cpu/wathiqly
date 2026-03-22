@@ -9,6 +9,7 @@ const connection = new IORedis(REDIS_URL, { maxRetriesPerRequest: null });
 
 /**
  * Event Payload Schema (Rule 12, 18)
+ * RULE 13: Remove all "any" types
  */
 const EventPayloadSchema = z.object({
   event: z.string(),
@@ -63,8 +64,9 @@ export const eventWorker = new Worker('event-queue', async (job: Job<EventPayloa
       correlationId: validated.correlationId,
       idempotencyKey: validated.idempotencyKey 
     });
-  } catch (error) {
-    Logger.error(`[EventWorker][CID:${correlationId}] CRITICAL: Handler failed for ${event}`, error);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    Logger.error(`[EventWorker][CID:${correlationId}] CRITICAL: Handler failed for ${event}: ${errorMessage}`);
     throw error; // BullMQ will retry based on job options
   }
 }, { 
@@ -77,14 +79,15 @@ eventWorker.on('completed', (job) => {
 });
 
 eventWorker.on('failed', (job, err) => {
-  Logger.error(`[EventWorker] Job ${job?.id} failed after ${job?.attemptsMade} attempts`, err, {
+  const errorMessage = err instanceof Error ? err.message : String(err);
+  Logger.error(`[EventWorker] Job ${job?.id} failed after ${job?.attemptsMade} attempts: ${errorMessage}`, {
     correlationId: job?.data?.correlationId,
     idempotencyKey: job?.data?.idempotencyKey
   });
   
   // Rule 7: Implement dead-letter queues
   if (job?.attemptsMade === job?.opts.attempts) {
-    Logger.error(`[EventWorker][DLQ] Job ${job.id} moved to DLQ (failed set)`);
+    Logger.error(`[EventWorker][DLQ] Job ${job.id} moved to DLQ (failed set) after ${job.opts.attempts} attempts`);
   }
 });
 
