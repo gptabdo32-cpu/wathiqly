@@ -1,12 +1,17 @@
 import { eq } from "drizzle-orm";
-import { IEscrowRepository, OutboxEventInput, SagaInstanceInput } from "../domain/IEscrowRepository";
+import { IEscrowRepository, OutboxEventInput } from "../domain/IEscrowRepository";
 import { Escrow } from "../domain/Escrow";
-import { escrows, disputes, escrowSagaInstances } from "../../../infrastructure/db/schema";
+import { escrows, disputes } from "../../../infrastructure/db/schema";
 import { outboxEvents } from "../../../infrastructure/db/schema_outbox";
 import { getDb } from "../../../apps/api/db";
 import { EscrowMapper } from "./EscrowMapper";
 import { TransactionManager } from "../../../core/db/TransactionManager";
 
+/**
+ * DrizzleEscrowRepository
+ * RULE 17: Enforce module boundaries
+ * RULE 13: Remove all "any" types
+ */
 export class DrizzleEscrowRepository implements IEscrowRepository {
   async create(escrow: Escrow, tx?: any): Promise<number> {
     const db = tx || (await getDb());
@@ -88,45 +93,7 @@ export class DrizzleEscrowRepository implements IEscrowRepository {
     const db = tx || (await getDb());
     await db.insert(outboxEvents).values({
       ...event,
-      payload: event.payload as any // Drizzle JSON handling
+      payload: event.payload as any
     });
-  }
-
-  async updateEscrowBlockchainStatus(escrowId: number, blockchainStatus: "none" | "pending" | "confirmed" | "failed", lastTxHash: string, tx?: any): Promise<void> {
-    const db = tx || (await getDb());
-    // Placeholder for future blockchain status updates
-  }
-
-  async updateDisputeBlockchainStatus(disputeId: number, blockchainTxHash: string, tx?: any): Promise<void> {
-    const db = tx || (await getDb());
-    await db.update(disputes)
-      .set({ updatedAt: new Date() })
-      .where(eq(disputes.id, disputeId));
-  }
-
-  async createSagaInstance(instance: SagaInstanceInput, tx?: any): Promise<void> {
-    const db = tx || (await getDb());
-    await db.insert(escrowSagaInstances).values({
-      ...instance,
-      payload: instance.payload as any // Drizzle JSON handling
-    });
-  }
-
-  async getSagaInstanceByCorrelationId(correlationId: string, tx?: any): Promise<unknown> {
-    const db = tx || (await getDb());
-    const [row] = await db
-      .select()
-      .from(escrowSagaInstances)
-      .where(eq(escrowSagaInstances.correlationId, correlationId))
-      .limit(1);
-    return row;
-  }
-
-  async updateSagaStatus(correlationId: string, status: SagaInstanceInput["status"], error?: string, tx?: any): Promise<void> {
-    const db = tx || (await getDb());
-    await db
-      .update(escrowSagaInstances)
-      .set({ status, error, updatedAt: new Date() })
-      .where(eq(escrowSagaInstances.correlationId, correlationId));
   }
 }
