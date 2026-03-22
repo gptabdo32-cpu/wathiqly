@@ -1,8 +1,11 @@
 /**
  * Base Event Interface for Deterministic Financial System
  * Enforces traceability, replayability, and idempotency.
+ * RULE 13: Remove all "any" types
+ * RULE 18: Add correlationId across all flows
+ * RULE 19: Ensure full replayability of events
  */
-export interface BaseEvent<T = any> {
+export interface BaseEvent<T = Record<string, unknown>> {
   /** Globally unique event ID (UUID/ULID) */
   eventId: string;
   
@@ -31,16 +34,17 @@ export interface BaseEvent<T = any> {
    */
   causationId?: string;
   
-  /** Timestamp of when the event occurred */
-  timestamp: number;
+  /** Timestamp of when the event occurred (ISO String for better serialization) */
+  timestamp: string;
   
   /** Key used to ensure the same operation isn't processed twice */
   idempotencyKey: string;
 }
 
 export interface OutboxEvent extends BaseEvent {
-  status: 'pending' | 'processed' | 'failed';
-  error?: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'dead_letter';
+  error?: string | null;
   retries: number;
-  lastRetryAt?: number;
+  processedAt?: string | null;
+  lastAttemptAt?: string | null;
 }

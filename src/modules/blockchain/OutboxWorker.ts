@@ -1,6 +1,6 @@
 import { eq, and, or, lt } from "drizzle-orm";
 import { outboxEvents } from "../../infrastructure/db/schema_outbox";
-import { getDb } from "../../apps/api/db";
+import { getDb } from "../../infrastructure/db";
 import { Logger } from "../../core/observability/Logger";
 import { publishToQueue } from "../../core/events/EventQueue";
 
@@ -39,7 +39,6 @@ export class OutboxWorker {
     if (!db) return;
 
     // Rule 19: Atomic fetch and lock (using skip locked if supported, or simple status update)
-    // For MySQL/TiDB, we'll use a transaction to ensure no two workers pick the same event
     try {
       await db.transaction(async (tx) => {
         const pendingEvents = await tx
@@ -89,10 +88,9 @@ export class OutboxWorker {
               })
               .where(eq(outboxEvents.id, event.id));
               
-            // Logger.audit is a placeholder in the original file, we'll use Logger.info or AuditLogger if available
             Logger.info(`[Outbox][CID:${correlationId}] Event ${event.eventType} dispatched successfully`);
 
-          } catch (error) {
+          } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : "Unknown outbox dispatch error";
             const isDeadLetter = event.retries + 1 >= this.MAX_RETRIES;
             const status = isDeadLetter ? "dead_letter" : "failed";
@@ -113,7 +111,7 @@ export class OutboxWorker {
           }
         }
       });
-    } catch (error) {
+    } catch (error: unknown) {
       Logger.error("[OutboxWorker] Transaction error in processPendingEvents", error);
     }
   }
