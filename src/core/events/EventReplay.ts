@@ -1,50 +1,90 @@
 import { getDb } from "../../infrastructure/db";
 import { outboxEvents } from "../../infrastructure/db/schema_outbox";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, and } from "drizzle-orm";
 import { Logger } from "../observability/Logger";
+import { ReplayIsolation } from "./ReplayIsolation";
+import { v4 as uuidv4 } from 'uuid';
 
 /**
- * Event Replay System (Rule 9)
- * MISSION: Enable full system reconstruction from events.
+ * Event Replay System (Improvement 5, 12, 19)
+ * MISSION: Enable full system reconstruction from events with strict isolation.
  */
 export class EventReplay {
+  private static replayIsolation = new ReplayIsolation();
+
   /**
-   * Replay events for a specific aggregate
+   * Replay events for a specific aggregate with side-effect isolation
+   * Improvement 5: Isolate side effects during Event Replay
    */
-  static async replayAggregate(aggregateType: string, aggregateId: string): Promise<any[]> {
+  static async replayAggregate(params: {
+    aggregateType: string;
+    aggregateId: string | number;
+    correlationId?: string;
+  }): Promise<any[]> {
+    const { aggregateType, aggregateId, correlationId = uuidv4() } = params;
+    const replayId = `replay_${aggregateType}_${aggregateId}_${Date.now()}`;
+    
     const db = await getDb();
     
-    Logger.info(`[EventReplay] Replaying events for ${aggregateType} #${aggregateId}`);
+    Logger.info(`[EventReplay][CID:${correlationId}] Starting isolated replay for ${aggregateType} #${aggregateId}`);
+    
+    // Start isolated replay session
+    this.replayIsolation.startReplay({ replayId, correlationId });
 
-    const events = await db
-      .select()
-      .from(outboxEvents)
-      .where(
-        and(
-          eq(outboxEvents.aggregateType, aggregateType),
-          eq(outboxEvents.aggregateId, aggregateId)
+    try {
+      const events = await db
+        .select()
+        .from(outboxEvents)
+        .where(
+          and(
+            eq(outboxEvents.aggregateType, aggregateType),
+            eq(outboxEvents.aggregateId, Number(aggregateId))
+          )
         )
-      )
-      .orderBy(asc(outboxEvents.createdAt));
+        .orderBy(asc(outboxEvents.createdAt));
 
-    Logger.info(`[EventReplay] Found ${events.length} events to replay.`);
+      Logger.info(`[EventReplay][CID:${correlationId}] Found ${events.length} events to replay.`);
 
-    return events.map(e => ({
-      type: e.eventType,
-      payload: e.payload,
-      timestamp: e.createdAt,
-      version: e.version,
-    }));
+      return events.map(e => ({
+        type: e.eventType,
+        payload: e.payload,
+        timestamp: e.createdAt,
+        version: e.version,
+        eventId: e.eventId,
+      }));
+    } finally {
+      // End replay session - side effects are deferred and not executed
+      const deferred = this.replayIsolation.endReplay(replayId);
+      if (deferred.length > 0) {
+        Logger.warn(`[EventReplay][CID:${correlationId}] Detected and isolated ${deferred.length} side effects during replay.`);
+      }
+    }
   }
 
   /**
-   * Guarantee deterministic results (Rule 9)
+   * Guarantee deterministic results (Improvement 5, 19)
    */
-  static async reconstructState(aggregateType: string, aggregateId: string, reducer: (state: any, event: any) => any, initialState: any): Promise<any> {
-    const events = await this.replayAggregate(aggregateType, aggregateId);
+  static async reconstructState(
+    aggregateType: string, 
+    aggregateId: string | number, 
+    reducer: (state: any, event: any) => any, 
+    initialState: any,
+    correlationId?: string
+  ): Promise<any> {
+    const events = await this.replayAggregate({ aggregateType, aggregateId, correlationId });
     return events.reduce(reducer, initialState);
+  }
+
+  /**
+   * Helper to ensure an operation is not executed during replay
+   */
+  static assertNotReplaying(operationName: string, correlationId: string, replayId?: string) {
+    this.replayIsolation.assertNotInReplay({
+      operationName,
+      correlationId,
+      replayId
+    });
   }
 }
 
-// Helper for Drizzle imports
-import { and } from "drizzle-orm";
+export default EventReplay;

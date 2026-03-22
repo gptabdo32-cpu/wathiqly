@@ -2,6 +2,7 @@ import { Logger } from '../observability/Logger';
 import { DistributedLock } from '../locking/DistributedLock';
 import { SagaManager } from './SagaManager';
 import { SagaStatus, SagaType } from './SagaTypes';
+import { getDb } from '../../infrastructure/db';
 
 /**
  * Atomic Saga Executor (Improvements 1, 2, 10, 17)
@@ -39,7 +40,7 @@ export class AtomicSagaExecutor {
   static async execute<T>(params: {
     sagaId: string;
     correlationId: string;
-    operation: () => Promise<T>;
+    operation: (tx?: any) => Promise<T>;
     sagaType?: string;
   }): Promise<T> {
     const { sagaId, correlationId, operation, sagaType = 'Unknown' } = params;
@@ -52,13 +53,16 @@ export class AtomicSagaExecutor {
           { sagaType }
         );
 
-        // Acquire distributed lock to prevent concurrent modifications
-        const lockAcquired = await DistributedLock.withLock(
+        // Improvement 10: Distributed Locking for critical flows
+        const result = await DistributedLock.withLock(
           `saga:${sagaId}`,
           correlationId,
           async () => {
-            // Execute the operation within the lock
-            return await operation();
+            // Improvement 8: Enforce Outbox + DB transaction atomicity
+            const db = await getDb();
+            return await db.transaction(async (tx) => {
+              return await operation(tx);
+            });
           },
           30000 // 30 second TTL
         );
@@ -68,7 +72,7 @@ export class AtomicSagaExecutor {
           { sagaType, attempt }
         );
 
-        return lockAcquired;
+        return result;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
 

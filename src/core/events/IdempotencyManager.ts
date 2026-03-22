@@ -1,1 +1,259 @@
-import { getDb } from '../../infrastructure/db';\nimport { Logger } from '../observability/Logger';\nimport { eq } from 'drizzle-orm';\n\n/**\n * Idempotency Manager (Improvements 4, 11)\n * MISSION: Guarantee that duplicate events are detected and handled safely.\n * \n * Strategies:\n * 1. Database-level tracking: Store idempotency keys with results\n * 2. Deduplication: Detect and skip duplicate events\n * 3. Atomic operations: Ensure idempotency key and result are stored atomically\n * \n * Guarantees:\n * - Same event processed twice produces same result\n * - Duplicate detection is reliable and fast\n * - No side effects from duplicate processing\n */\n\n/**\n * Idempotency Record Schema\n * This would be stored in a database table\n */\nexport interface IdempotencyRecord {\n  id?: number;\n  idempotencyKey: string;\n  eventId: string;\n  aggregateId: string | number;\n  aggregateType: string;\n  eventType: string;\n  correlationId: string;\n  status: 'PROCESSING' | 'COMPLETED' | 'FAILED';\n  result?: Record<string, unknown>; // Serialized result\n  error?: string;\n  createdAt: Date;\n  completedAt?: Date;\n  expiresAt: Date; // For cleanup (24 hours default)\n}\n\nexport class IdempotencyManager {\n  private static readonly EXPIRY_HOURS = 24;\n\n  /**\n   * Check if an event has been processed before.\n   * Returns the cached result if available.\n   */\n  static async checkIdempotency(params: {\n    idempotencyKey: string;\n    correlationId: string;\n  }): Promise<{\n    isDuplicate: boolean;\n    result?: Record<string, unknown>;\n    error?: string;\n  }> {\n    const { idempotencyKey, correlationId } = params;\n\n    try {\n      const db = await getDb();\n      // Note: This assumes an idempotency_records table exists\n      // We'll need to add this to the schema\n      const record = await db.query.idempotencyRecords?.findFirst({\n        where: (records, { eq }) => eq(records.idempotencyKey, idempotencyKey),\n      });\n\n      if (!record) {\n        Logger.debug(\n          `[IdempotencyManager][CID:${correlationId}] New event (no previous record): ${idempotencyKey}`\n        );\n        return { isDuplicate: false };\n      }\n\n      // Check if record has expired\n      if (new Date() > record.expiresAt) {\n        Logger.info(\n          `[IdempotencyManager][CID:${correlationId}] Idempotency record expired: ${idempotencyKey}`\n        );\n        return { isDuplicate: false };\n      }\n\n      if (record.status === 'COMPLETED') {\n        Logger.info(\n          `[IdempotencyManager][CID:${correlationId}] Duplicate event detected (completed): ${idempotencyKey}`,\n          { result: record.result }\n        );\n        return {\n          isDuplicate: true,\n          result: record.result,\n        };\n      }\n\n      if (record.status === 'FAILED') {\n        Logger.warn(\n          `[IdempotencyManager][CID:${correlationId}] Duplicate event detected (previously failed): ${idempotencyKey}`,\n          { error: record.error }\n        );\n        return {\n          isDuplicate: true,\n          error: record.error,\n        };\n      }\n\n      // Still processing\n      Logger.info(\n        `[IdempotencyManager][CID:${correlationId}] Event still processing: ${idempotencyKey}`\n      );\n      return { isDuplicate: false };\n    } catch (error) {\n      Logger.error(\n        `[IdempotencyManager][CID:${correlationId}] Error checking idempotency: ${idempotencyKey}`,\n        error\n      );\n      // On error, allow processing (fail open)\n      return { isDuplicate: false };\n    }\n  }\n\n  /**\n   * Mark an event as being processed.\n   * Creates or updates the idempotency record.\n   */\n  static async markProcessing(params: {\n    idempotencyKey: string;\n    eventId: string;\n    aggregateId: string | number;\n    aggregateType: string;\n    eventType: string;\n    correlationId: string;\n  }): Promise<void> {\n    const {\n      idempotencyKey,\n      eventId,\n      aggregateId,\n      aggregateType,\n      eventType,\n      correlationId,\n    } = params;\n\n    try {\n      const db = await getDb();\n      const expiresAt = new Date();\n      expiresAt.setHours(expiresAt.getHours() + this.EXPIRY_HOURS);\n\n      // Note: This assumes an idempotency_records table exists\n      // Insert or update the record\n      await db.insert(db.table('idempotency_records')).values({\n        idempotencyKey,\n        eventId,\n        aggregateId: String(aggregateId),\n        aggregateType,\n        eventType,\n        correlationId,\n        status: 'PROCESSING',\n        createdAt: new Date(),\n        expiresAt,\n      });\n\n      Logger.debug(\n        `[IdempotencyManager][CID:${correlationId}] Event marked as processing: ${idempotencyKey}`\n      );\n    } catch (error) {\n      Logger.error(\n        `[IdempotencyManager][CID:${correlationId}] Error marking event as processing: ${idempotencyKey}`,\n        error\n      );\n      throw error;\n    }\n  }\n\n  /**\n   * Mark an event as successfully completed.\n   * Stores the result for future duplicate requests.\n   */\n  static async markCompleted(params: {\n    idempotencyKey: string;\n    result: Record<string, unknown>;\n    correlationId: string;\n  }): Promise<void> {\n    const { idempotencyKey, result, correlationId } = params;\n\n    try {\n      const db = await getDb();\n      const expiresAt = new Date();\n      expiresAt.setHours(expiresAt.getHours() + this.EXPIRY_HOURS);\n\n      // Note: This assumes an idempotency_records table exists\n      // Update the record\n      await db\n        .update(db.table('idempotency_records'))\n        .set({\n          status: 'COMPLETED',\n          result,\n          completedAt: new Date(),\n          expiresAt,\n        })\n        .where(eq(db.table('idempotency_records').idempotencyKey, idempotencyKey));\n\n      Logger.debug(\n        `[IdempotencyManager][CID:${correlationId}] Event marked as completed: ${idempotencyKey}`\n      );\n    } catch (error) {\n      Logger.error(\n        `[IdempotencyManager][CID:${correlationId}] Error marking event as completed: ${idempotencyKey}`,\n        error\n      );\n      throw error;\n    }\n  }\n\n  /**\n   * Mark an event as failed.\n   * Stores the error for future duplicate requests.\n   */\n  static async markFailed(params: {\n    idempotencyKey: string;\n    error: string;\n    correlationId: string;\n  }): Promise<void> {\n    const { idempotencyKey, error, correlationId } = params;\n\n    try {\n      const db = await getDb();\n      const expiresAt = new Date();\n      expiresAt.setHours(expiresAt.getHours() + this.EXPIRY_HOURS);\n\n      // Note: This assumes an idempotency_records table exists\n      // Update the record\n      await db\n        .update(db.table('idempotency_records'))\n        .set({\n          status: 'FAILED',\n          error,\n          completedAt: new Date(),\n          expiresAt,\n        })\n        .where(eq(db.table('idempotency_records').idempotencyKey, idempotencyKey));\n\n      Logger.debug(\n        `[IdempotencyManager][CID:${correlationId}] Event marked as failed: ${idempotencyKey}`\n      );\n    } catch (error) {\n      Logger.error(\n        `[IdempotencyManager][CID:${correlationId}] Error marking event as failed: ${idempotencyKey}`,\n        error\n      );\n      throw error;\n    }\n  }\n}\n\nexport default IdempotencyManager;\n
+import { getDb } from '../../infrastructure/db';
+import { Logger } from '../observability/Logger';
+import { eq } from 'drizzle-orm';
+
+/**
+ * Idempotency Manager (Improvements 4, 11)
+ * MISSION: Guarantee that duplicate events are detected and handled safely.
+ * 
+ * Strategies:
+ * 1. Database-level tracking: Store idempotency keys with results
+ * 2. Deduplication: Detect and skip duplicate events
+ * 3. Atomic operations: Ensure idempotency key and result are stored atomically
+ * 
+ * Guarantees:
+ * - Same event processed twice produces same result
+ * - Duplicate detection is reliable and fast
+ * - No side effects from duplicate processing
+ */
+
+/**
+ * Idempotency Record Schema
+ */
+export interface IdempotencyRecord {
+  id?: number;
+  idempotencyKey: string;
+  eventId: string;
+  aggregateId: string | number;
+  aggregateType: string;
+  eventType: string;
+  correlationId: string;
+  status: 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  result?: Record<string, unknown>; // Serialized result
+  error?: string;
+  createdAt: Date;
+  completedAt?: Date;
+  expiresAt: Date; // For cleanup (24 hours default)
+}
+
+export class IdempotencyManager {
+  private static readonly EXPIRY_HOURS = 24;
+
+  /**
+   * Check if an event has been processed before.
+   * Improvement 4, 11: Strict enforcement of idempotency
+   */
+  static async checkIdempotency(params: {
+    idempotencyKey: string;
+    correlationId: string;
+    tx?: any;
+  }): Promise<{
+    isDuplicate: boolean;
+    result?: Record<string, unknown>;
+    error?: string;
+  }> {
+    const { idempotencyKey, correlationId, tx } = params;
+
+    try {
+      const db = tx || (await getDb());
+      
+      // Dynamic import to avoid circular dependencies if any
+      const { idempotencyRecords } = await import('../../infrastructure/db/schema_outbox');
+      
+      const records = await db
+        .select()
+        .from(idempotencyRecords)
+        .where(eq(idempotencyRecords.idempotencyKey, idempotencyKey))
+        .limit(1);
+
+      const record = records[0];
+
+      if (!record) {
+        Logger.debug(
+          `[IdempotencyManager][CID:${correlationId}] New event (no previous record): ${idempotencyKey}`
+        );
+        return { isDuplicate: false };
+      }
+
+      // Check if record has expired
+      if (new Date() > record.expiresAt) {
+        Logger.info(
+          `[IdempotencyManager][CID:${correlationId}] Idempotency record expired: ${idempotencyKey}`
+        );
+        return { isDuplicate: false };
+      }
+
+      if (record.status === 'COMPLETED') {
+        Logger.info(
+          `[IdempotencyManager][CID:${correlationId}] Duplicate event detected (completed): ${idempotencyKey}`,
+          { result: record.result }
+        );
+        return {
+          isDuplicate: true,
+          result: record.result as Record<string, unknown>,
+        };
+      }
+
+      if (record.status === 'FAILED') {
+        Logger.warn(
+          `[IdempotencyManager][CID:${correlationId}] Duplicate event detected (previously failed): ${idempotencyKey}`,
+          { error: record.error }
+        );
+        return {
+          isDuplicate: true,
+          error: record.error || undefined,
+        };
+      }
+
+      // Still processing
+      Logger.info(
+        `[IdempotencyManager][CID:${correlationId}] Event still processing: ${idempotencyKey}`
+      );
+      return { isDuplicate: true }; 
+    } catch (error) {
+      Logger.error(
+        `[IdempotencyManager][CID:${correlationId}] Error checking idempotency: ${idempotencyKey}`,
+        error
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Mark an event as being processed.
+   * Improvement 4, 11: Atomic marking with transaction support
+   */
+  static async markProcessing(params: {
+    idempotencyKey: string;
+    eventId: string;
+    aggregateId: string | number;
+    aggregateType: string;
+    eventType: string;
+    correlationId: string;
+    tx?: any;
+  }): Promise<void> {
+    const {
+      idempotencyKey,
+      eventId,
+      aggregateId,
+      aggregateType,
+      eventType,
+      correlationId,
+      tx,
+    } = params;
+
+    try {
+      const db = tx || (await getDb());
+      const { idempotencyRecords } = await import('../../infrastructure/db/schema_outbox');
+      
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + this.EXPIRY_HOURS);
+
+      await db.insert(idempotencyRecords).values({
+        idempotencyKey,
+        eventId,
+        aggregateId: String(aggregateId),
+        aggregateType,
+        eventType,
+        correlationId,
+        status: 'PROCESSING',
+        createdAt: new Date(),
+        expiresAt,
+      });
+
+      Logger.debug(
+        `[IdempotencyManager][CID:${correlationId}] Event marked as processing: ${idempotencyKey}`
+      );
+    } catch (error) {
+      Logger.error(
+        `[IdempotencyManager][CID:${correlationId}] Error marking event as processing: ${idempotencyKey}`,
+        error
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Mark an event as successfully completed.
+   * Improvement 4, 11: Atomic completion with transaction support
+   */
+  static async markCompleted(params: {
+    idempotencyKey: string;
+    result: Record<string, unknown>;
+    correlationId: string;
+    tx?: any;
+  }): Promise<void> {
+    const { idempotencyKey, result, correlationId, tx } = params;
+
+    try {
+      const db = tx || (await getDb());
+      const { idempotencyRecords } = await import('../../infrastructure/db/schema_outbox');
+      
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + this.EXPIRY_HOURS);
+
+      await db
+        .update(idempotencyRecords)
+        .set({
+          status: 'COMPLETED',
+          result,
+          completedAt: new Date(),
+          expiresAt,
+        })
+        .where(eq(idempotencyRecords.idempotencyKey, idempotencyKey));
+
+      Logger.debug(
+        `[IdempotencyManager][CID:${correlationId}] Event marked as completed: ${idempotencyKey}`
+      );
+    } catch (error) {
+      Logger.error(
+        `[IdempotencyManager][CID:${correlationId}] Error marking event as completed: ${idempotencyKey}`,
+        error
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Mark an event as failed.
+   * Improvement 4, 11: Atomic failure with transaction support
+   */
+  static async markFailed(params: {
+    idempotencyKey: string;
+    error: string;
+    correlationId: string;
+    tx?: any;
+  }): Promise<void> {
+    const { idempotencyKey, error, correlationId, tx } = params;
+
+    try {
+      const db = tx || (await getDb());
+      const { idempotencyRecords } = await import('../../infrastructure/db/schema_outbox');
+      
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + this.EXPIRY_HOURS);
+
+      await db
+        .update(idempotencyRecords)
+        .set({
+          status: 'FAILED',
+          error,
+          completedAt: new Date(),
+          expiresAt,
+        })
+        .where(eq(idempotencyRecords.idempotencyKey, idempotencyKey));
+
+      Logger.debug(
+        `[IdempotencyManager][CID:${correlationId}] Event marked as failed: ${idempotencyKey}`
+      );
+    } catch (error) {
+      Logger.error(
+        `[IdempotencyManager][CID:${correlationId}] Error marking event as failed: ${idempotencyKey}`,
+        error
+      );
+      throw error;
+    }
+  }
+}
+
+export default IdempotencyManager;

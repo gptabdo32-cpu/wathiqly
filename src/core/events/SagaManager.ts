@@ -1,6 +1,6 @@
 import { getDb } from "../../infrastructure/db";
 import { sagaStates } from "../../infrastructure/db/schema_saga";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { Logger } from "../observability/Logger";
 import { SagaStatus, SagaType, SagaStateSchemas } from "./SagaTypes";
 
@@ -13,18 +13,22 @@ export class SagaManager {
   /**
    * Initialize or update saga state in the database
    */
+  /**
+   * Initialize or update saga state in the database
+   * Improvement 1, 2, 8: Atomic transitions, OCC, and Transaction support
+   */
   static async saveState<T extends SagaType>(params: {
     sagaId: string;
     type: T;
     status: SagaStatus;
-    state: any; // Validated below
+    state: any;
     correlationId: string;
+    tx?: any; // Support for external transactions
   }): Promise<void> {
-    const db = await getDb();
+    const db = params.tx || (await getDb());
     
     Logger.info(`[SagaManager][CID:${params.correlationId}] Saving saga state: ${params.sagaId} (${params.status})`);
 
-    // Rule 3: Enforce runtime validation of state shape
     const schema = SagaStateSchemas[params.type];
     if (!schema) {
       throw new Error(`No schema defined for saga type: ${params.type}`);
@@ -40,20 +44,26 @@ export class SagaManager {
 
       if (existing.length > 0) {
         const currentVersion = existing[0].version;
+        
+        // Improvement 2: Optimistic Concurrency Control (OCC)
         const result = await db
           .update(sagaStates)
           .set({
             status: params.status,
             state: validatedState,
             updatedAt: new Date(),
-            version: currentVersion + 1, // Increment version for optimistic concurrency
+            version: currentVersion + 1,
           })
-          .where(eq(sagaStates.sagaId, params.sagaId).and(eq(sagaStates.version, currentVersion)));
+          .where(
+            and(
+              eq(sagaStates.sagaId, params.sagaId),
+              eq(sagaStates.version, currentVersion)
+            )
+          );
 
-        if (result.rowsAffected === 0) {
-          Logger.warn(`[SagaManager][CID:${params.correlationId}] Optimistic concurrency conflict for saga: ${params.sagaId}. Retrying...`);
-          // This indicates a concurrent modification. A retry mechanism or error handling should be in place.
-          // For now, we'll throw an error to indicate the conflict.
+        // In Drizzle with MySQL, result might not have rowsAffected directly depending on driver
+        // But we should check if the update actually happened
+        if (result[0]?.affectedRows === 0) {
           throw new Error(`Optimistic concurrency conflict for saga: ${params.sagaId}`);
         }
       } else {
@@ -63,11 +73,12 @@ export class SagaManager {
           status: params.status,
           state: validatedState,
           correlationId: params.correlationId,
+          version: 1,
         });
       }
     } catch (error) {
       Logger.error(`[SagaManager][CID:${params.correlationId}] Failed to save saga state`, error);
-      throw error; // Rule 15: No silent failures
+      throw error;
     }
   }
 
