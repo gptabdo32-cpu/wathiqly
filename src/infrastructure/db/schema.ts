@@ -254,6 +254,17 @@ export const reviews = mysqlTable("reviews", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+export const aiArbitratorAnalyses = mysqlTable("aiArbitratorAnalyses", {
+  id: int("id").autoincrement().primaryKey(),
+  escrowId: int("escrowId").notNull(),
+  fairnessScore: int("fairnessScore").notNull(),
+  legalRiskLevel: mysqlEnum("legalRiskLevel", ["low", "medium", "high", "critical"]).notNull(),
+  analysisResults: json("analysisResults").notNull(),
+  summary: text("summary").notNull(),
+  status: mysqlEnum("status", ["pending", "completed", "failed"]).default("pending").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 export type InsertReview = typeof reviews.$inferInsert;
 
 // ============ SAGA STATE MACHINE ============

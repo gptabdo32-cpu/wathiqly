@@ -32,5 +32,9 @@ export interface IEscrowRepository {
   
   saveOutboxEvent(event: OutboxEventInput, tx?: unknown): Promise<void>;
 
+  saveMilestones(escrowId: number, milestones: any[]): Promise<void>;
+
+  saveAiAnalysis(escrowId: number, analysis: any): Promise<{ id: number }>;
+
   // Saga state is now managed via SagaManager for better modularity (Rule 17)
 }

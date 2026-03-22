@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { IEscrowRepository, OutboxEventInput } from "../domain/IEscrowRepository";
 import { Escrow } from "../domain/Escrow";
-import { escrows, disputes } from "../../../infrastructure/db/schema";
+import { escrows, disputes, escrowMilestones, aiArbitratorAnalyses } from "../../../infrastructure/db/schema";
 import { outboxEvents } from "../../../infrastructure/db/schema_outbox";
 import { getDb } from "../../../infrastructure/db";
 import { EscrowMapper } from "./EscrowMapper";
@@ -91,6 +91,29 @@ export class DrizzleEscrowRepository implements IEscrowRepository {
       .update(disputes)
       .set(data as any) // Internal Drizzle cast for generic update
       .where(eq(disputes.id, id));
+  }
+
+  async saveMilestones(escrowId: number, milestones: any[], tx?: DbTransaction): Promise<void> {
+    const db = tx || (await getDb());
+    const values = milestones.map(m => ({
+      ...m,
+      escrowId,
+      status: "pending"
+    }));
+    await db.insert(escrowMilestones).values(values);
+  }
+
+  async saveAiAnalysis(escrowId: number, analysis: any, tx?: DbTransaction): Promise<{ id: number }> {
+    const db = tx || (await getDb());
+    const [result] = await db.insert(aiArbitratorAnalyses).values({
+      escrowId,
+      fairnessScore: analysis.fairnessScore,
+      legalRiskLevel: analysis.legalRiskLevel,
+      analysisResults: analysis,
+      summary: analysis.summary,
+      status: "completed"
+    });
+    return { id: result.insertId };
   }
 
   /**

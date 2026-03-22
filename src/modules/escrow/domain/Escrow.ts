@@ -5,6 +5,7 @@ export interface EscrowProps {
   buyerId: number;
   sellerId: number;
   amount: string;
+  title: string;
   description: string;
   status: EscrowStatus;
   buyerLedgerAccountId?: number;
