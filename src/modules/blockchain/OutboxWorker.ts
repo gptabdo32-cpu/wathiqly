@@ -1,4 +1,4 @@
-import { eq, and, or, lt, sql } from "drizzle-orm";
+import { eq, and, or, lt } from "drizzle-orm";
 import { outboxEvents } from "../../infrastructure/db/schema_outbox";
 import { getDb } from "../../apps/api/db";
 import { Logger } from "../../core/observability/Logger";
@@ -16,7 +16,6 @@ export class OutboxWorker {
   private intervalId: NodeJS.Timeout | null = null;
   private readonly MAX_RETRIES = 10; // Rule 6
   private readonly POLL_INTERVAL_MS = 2000;
-  private readonly RETRY_DELAY_MS = 30 * 1000; // 30 seconds initial backoff
 
   public start() {
     if (this.isRunning) return;
@@ -69,7 +68,12 @@ export class OutboxWorker {
         Logger.info(`[Outbox][CID:${correlationId}] Dispatching event: ${event.eventType}`, { eventId: event.eventId });
         
         // RULE 3: Replace direct service calls with event publishing
-        await publishToQueue(event.eventType, event.payload, correlationId);
+        await publishToQueue({
+          event: event.eventType,
+          payload: event.payload as Record<string, unknown>,
+          correlationId: event.correlationId,
+          idempotencyKey: event.idempotencyKey
+        });
 
         // Mark as completed
         await db.update(outboxEvents)
@@ -110,6 +114,5 @@ export class OutboxWorker {
       eventType: event.eventType,
       reason: "Max retries exceeded"
     });
-    // In a real system, we might alert devops here
   }
 }

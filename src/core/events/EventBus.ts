@@ -10,17 +10,17 @@ export const IntegrationEventSchema = z.object({
   timestamp: z.date(),
   correlationId: z.string().uuid(),
   idempotencyKey: z.string(),
-  payload: z.any(), // Will be refined per event type
-  metadata: z.record(z.any()).optional(),
+  payload: z.record(z.unknown()), // Rule 13: No any
+  metadata: z.record(z.unknown()).optional(),
 });
 
 export type IntegrationEvent = z.infer<typeof IntegrationEventSchema>;
 
-type EventHandler<T = any> = (data: T) => Promise<void>;
+type EventHandler<T = Record<string, unknown>> = (data: T & { correlationId: string; idempotencyKey: string }) => Promise<void>;
 
 export class EventBus {
   private static instance: EventBus;
-  private handlers: Map<string, EventHandler[]> = new Map();
+  private handlers: Map<string, EventHandler<any>[]> = new Map();
 
   private constructor() {}
 
@@ -34,7 +34,7 @@ export class EventBus {
   /**
    * Subscribe to a specific event.
    */
-  public subscribe<T>(event: string, handler: EventHandler<T>): void {
+  public subscribe<T extends Record<string, unknown>>(event: string, handler: EventHandler<T>): void {
     if (!this.handlers.has(event)) {
       this.handlers.set(event, []);
     }
@@ -46,9 +46,14 @@ export class EventBus {
    * Publish an event to all local subscribers.
    * Rule 15: Prevent silent failures
    */
-  public async publish(event: string, data: any): Promise<void> {
+  public async publish(event: string, data: { 
+    payload: Record<string, unknown>; 
+    correlationId: string; 
+    idempotencyKey: string;
+    eventId?: string;
+  }): Promise<void> {
     const handlers = this.handlers.get(event);
-    const correlationId = data.correlationId || "unknown";
+    const correlationId = data.correlationId;
     
     if (!handlers || handlers.length === 0) {
       Logger.info(`[EventBus][CID:${correlationId}] No local handlers for event: ${event}`);
@@ -65,7 +70,11 @@ export class EventBus {
     const results = await Promise.allSettled(
       handlers.map(async (handler) => {
         try {
-          await handler(data);
+          await handler({ 
+            ...data.payload, 
+            correlationId: data.correlationId, 
+            idempotencyKey: data.idempotencyKey 
+          });
           Logger.info(`[EventBus][CID:${correlationId}] Handler SUCCESS for ${event}`);
         } catch (error) {
           Logger.error(`[EventBus][CID:${correlationId}] Handler ERROR for ${event}:`, error);

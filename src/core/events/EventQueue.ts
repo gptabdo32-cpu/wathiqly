@@ -12,7 +12,7 @@ const connection = new IORedis(REDIS_URL, { maxRetriesPerRequest: null });
  */
 const EventPayloadSchema = z.object({
   event: z.string(),
-  payload: z.any(),
+  payload: z.record(z.unknown()), // Rule 13: No any
   correlationId: z.string().uuid(),
   idempotencyKey: z.string(),
 });
@@ -59,7 +59,7 @@ export const eventWorker = new Worker('event-queue', async (job: Job<EventPayloa
   // Rule 15: Prevent silent failures
   try {
     await eventBus.publish(validated.event, { 
-      ...validated.payload, 
+      payload: validated.payload, 
       correlationId: validated.correlationId,
       idempotencyKey: validated.idempotencyKey 
     });
@@ -95,7 +95,7 @@ eventWorker.on('failed', (job, err) => {
  */
 export async function publishToQueue(params: {
   event: string;
-  payload: any;
+  payload: Record<string, unknown>;
   correlationId: string;
   idempotencyKey: string;
 }) {
