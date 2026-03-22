@@ -20,7 +20,7 @@ export class Container {
   }
 
   static getReleaseEscrow() {
-    return new ReleaseEscrow(this._paymentService, this._escrowRepo);
+    return new ReleaseEscrow(this._escrowRepo);
   }
 
   static getOpenDispute() {
