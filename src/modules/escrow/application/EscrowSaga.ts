@@ -18,6 +18,8 @@ export interface EscrowSagaInput {
  * RULE 8: Store saga state in database
  * RULE 9: Convert workflows into saga state machines
  * RULE 13: Remove all "any" types
+ * RULE 5: Ensure every event is idempotent
+ * RULE 20: Validate system under failure scenarios
  */
 export class EscrowSaga {
   constructor(
@@ -77,7 +79,20 @@ export class EscrowSaga {
     const sagaId = `escrow_saga_${escrowId}`;
     const state = await SagaManager.getState<Record<string, unknown>>(sagaId);
     
-    if (!state || state.status === "COMPLETED") return;
+    // Rule 5: Idempotency check
+    if (!state) {
+        Logger.info(`[EscrowSaga][CID:${correlationId}] Saga state not found for Escrow #${escrowId}. Possible delayed processing.`);
+        return;
+    }
+
+    if (state.status === "COMPLETED") {
+        Logger.info(`[EscrowSaga][CID:${correlationId}] Saga already completed for Escrow #${escrowId}. Skipping.`);
+        return;
+    }
+
+    if (state.status === "FAILED") {
+        throw new Error(`[EscrowSaga][CID:${correlationId}] Invalid saga state: Cannot complete a FAILED saga for Escrow #${escrowId}`);
+    }
     
     Logger.info(`[EscrowSaga][CID:${correlationId}] Handling payment completion for Escrow #${escrowId}`);
 
@@ -122,7 +137,13 @@ export class EscrowSaga {
   async handlePaymentFailed(correlationId: string, reason: string, escrowId: number): Promise<void> {
     const sagaId = `escrow_saga_${escrowId}`;
     const state = await SagaManager.getState<Record<string, unknown>>(sagaId);
-    if (!state) return;
+    
+    if (!state) {
+        Logger.info(`[EscrowSaga][CID:${correlationId}] Saga state not found for Escrow #${escrowId}.`);
+        return;
+    }
+
+    if (state.status === "FAILED" || state.status === "COMPLETED") return;
 
     await SagaManager.saveState({
       sagaId,
