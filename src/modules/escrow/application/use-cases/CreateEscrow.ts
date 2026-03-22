@@ -1,7 +1,8 @@
 import { TransactionManager } from "../../../../core/db/TransactionManager";
 import { IEscrowRepository } from "../../domain/IEscrowRepository";
 import { Escrow } from "../../domain/Escrow";
-import { IPaymentService } from "../../domain/IPaymentService";
+import { v4 as uuidv4 } from 'uuid';
+import { publishToQueue } from "../../../../core/events/EventQueue";
 
 export interface CreateEscrowInput {
   buyerId: number;
@@ -11,13 +12,22 @@ export interface CreateEscrowInput {
   sellerWalletAddress?: string;
 }
 
+/**
+ * CreateEscrow Use Case (Event-Driven & Decoupled)
+ * MISSION: Deterministic distributed financial system
+ * RULE 1: Remove all synchronous cross-module calls
+ * RULE 2: Introduce real event-driven communication
+ * RULE 3: Replace direct service calls with event publishing
+ * RULE 18: Add correlationId across all flows
+ */
 export class CreateEscrow {
   constructor(
-    private paymentService: IPaymentService,
     private escrowRepo: IEscrowRepository
   ) {}
 
   async execute(params: CreateEscrowInput) {
+    const correlationId = uuidv4(); // RULE 18
+
     // 1. Domain Logic: Create the entity
     const escrow = Escrow.create({
       buyerId: params.buyerId,
@@ -30,56 +40,40 @@ export class CreateEscrow {
       // 2. Persistence: Initial record to get an ID
       const escrowId = await this.escrowRepo.create(escrow, tx);
 
-      // 3. Infrastructure Logic: Lock funds via PaymentService
-      const { escrowLedgerAccountId } = await this.paymentService.lockEscrowFunds({
+      // 3. Saga State Initialization (Rule 9)
+      await this.escrowRepo.createSagaInstance({
+        correlationId,
         escrowId,
-        amount: params.amount,
-        description: params.description,
+        status: "ESCROW_CREATED",
+        payload: { ...params, escrowId },
       }, tx);
 
-      // 4. Update Domain State (Pure Domain Logic)
-      // Note: In a stricter Clean Architecture, we might reload from DB or use a domain service
-      // but updating the entity state is acceptable if the entity supports it.
-      escrow.updateLedgerAccounts(escrowLedgerAccountId);
-
-      // 5. Persistence: Update the Escrow Contract with ledger accounts
-      await this.escrowRepo.update(escrow, tx);
-
-      // 6. ATOMIC OUTBOX: Save events inside the SAME transaction
-      if (params.sellerWalletAddress) {
-        await this.escrowRepo.saveOutboxEvent({
-          eventId: `evt_bc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          aggregateType: "escrow",
-          aggregateId: escrowId,
-          eventType: "EscrowCreateRequested",
-          version: 1,
-          payload: {
-            escrowId,
-            sellerWalletAddress: params.sellerWalletAddress,
-            amount: params.amount,
-          },
-          idempotencyKey: `escrow_bc_create_${escrowId}`,
-          status: "pending",
-        }, tx);
-      }
-
+      // 4. ATOMIC OUTBOX: Save event inside the SAME transaction (Rule 19)
+      const eventId = uuidv4();
       await this.escrowRepo.saveOutboxEvent({
-        eventId: `evt_fnd_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        eventId,
         aggregateType: "escrow",
         aggregateId: escrowId,
-        eventType: "EscrowFundsLocked",
+        eventType: "EscrowCreated",
         version: 1,
         payload: {
           escrowId,
           buyerId: params.buyerId,
           sellerId: params.sellerId,
           amount: params.amount,
+          description: params.description,
+          sellerWalletAddress: params.sellerWalletAddress,
+          correlationId,
         },
-        idempotencyKey: `escrow_fnd_lock_${escrowId}`,
+        correlationId,
+        idempotencyKey: `escrow_init_${escrowId}`,
         status: "pending",
       }, tx);
 
-      return escrowId;
+      // 5. Async Dispatch (Triggered by OutboxWorker, but we can also publish directly for speed)
+      // The OutboxWorker will ensure this is published even if the process crashes here.
+      
+      return { escrowId, correlationId };
     });
   }
 }
