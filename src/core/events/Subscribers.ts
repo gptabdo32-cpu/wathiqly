@@ -17,7 +17,7 @@ export function initializeSubscribers() {
   // 1. Escrow Saga Handlers (Distributed State Machine)
   // RULE 9: Convert workflows into saga state machines
   
-  eventBus.subscribe("EscrowCreated", async (data: any) => {
+  eventBus.subscribe("EscrowCreated", async (data) => {
     const correlationId = data.correlationId;
     Logger.info(`[Saga][CID:${correlationId}] Reacting to EscrowCreated. Triggering Payment...`);
     
@@ -27,9 +27,9 @@ export function initializeSubscribers() {
       await publishToQueue({
         event: "LockFundsCommand",
         payload: {
-          escrowId: data.escrowId,
-          buyerId: data.buyerId,
-          amount: data.amount,
+          escrowId: data.escrowId as number,
+          buyerId: data.buyerId as number,
+          amount: data.amount as string,
         },
         correlationId,
         idempotencyKey: `lock_funds_${data.escrowId}_${correlationId}`
@@ -44,23 +44,28 @@ export function initializeSubscribers() {
   const paymentProvider = new StripePaymentProvider(); // Rule 11: Real provider
   const paymentSaga = new PaymentSaga(paymentProvider);
 
-  eventBus.subscribe("LockFundsCommand", async (data: any) => {
+  eventBus.subscribe("LockFundsCommand", async (data) => {
     // Rule 1: Remove all synchronous cross-module calls
     // Rule 17: Enforce module boundaries
-    await paymentSaga.handleLockFunds(data);
+    await paymentSaga.handleLockFunds({
+      escrowId: data.escrowId as number,
+      buyerId: data.buyerId as number,
+      amount: data.amount as string,
+      correlationId: data.correlationId
+    });
   });
 
   // 3. Saga Completion Handlers
-  eventBus.subscribe("PaymentCompleted", async (data: any) => {
+  eventBus.subscribe("PaymentCompleted", async (data) => {
     const correlationId = data.correlationId;
     const saga = Container.get(EscrowSaga);
-    await saga.handlePaymentCompleted(correlationId, data.escrowLedgerAccountId);
+    await saga.handlePaymentCompleted(correlationId, data.escrowLedgerAccountId as number);
   });
 
-  eventBus.subscribe("PaymentFailed", async (data: any) => {
+  eventBus.subscribe("PaymentFailed", async (data) => {
     const correlationId = data.correlationId;
     const saga = Container.get(EscrowSaga);
-    await saga.handlePaymentFailed(correlationId, data.reason);
+    await saga.handlePaymentFailed(correlationId, data.reason as string);
   });
 
   Logger.info("[EventBus] All subscribers initialized (Saga Mode)");

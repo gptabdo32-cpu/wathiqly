@@ -28,13 +28,10 @@ export class EscrowSaga {
 
   /**
    * Start the Saga.
-   * NO TransactionManager here. Transactions are ONLY inside repositories.
-   * NO Synchronous cross-service calls.
    */
   async start(input: EscrowSagaInput): Promise<string> {
     const correlationId = uuidv4();
     
-    // 1. Create Domain Entity (Starts as PENDING - Task 7)
     const escrow = Escrow.create({
       buyerId: input.buyerId,
       sellerId: input.sellerId,
@@ -42,19 +39,15 @@ export class EscrowSaga {
       description: input.description,
     });
 
-    // 2. Persist Initial State & Saga Instance (Atomic inside Repo)
-    // The repository should handle the local ACID transaction
     const escrowId = await this.escrowRepo.create(escrow);
     
     await this.escrowRepo.createSagaInstance({
       correlationId,
       escrowId,
       status: "ESCROW_CREATED",
-      payload: { ...input, escrowId },
+      payload: { ...input, escrowId } as unknown as Record<string, unknown>,
     });
 
-    // 3. Emit EscrowCreatedEvent (Task 2)
-    // This replaces paymentService.lockEscrowFunds()
     await this.escrowRepo.saveOutboxEvent({
       eventId: uuidv4(),
       aggregateType: "escrow",
@@ -70,7 +63,7 @@ export class EscrowSaga {
       correlationId,
       idempotencyKey: `escrow_created_${escrowId}`,
       status: "pending",
-    } as any);
+    });
 
     return correlationId;
   }
@@ -79,13 +72,11 @@ export class EscrowSaga {
    * Handle Payment Success (Task 8 - Idempotent & Deterministic)
    */
   async handlePaymentCompleted(correlationId: string, escrowLedgerAccountId: number): Promise<void> {
-    const saga = await this.escrowRepo.getSagaInstanceByCorrelationId(correlationId);
+    const saga = await this.escrowRepo.getSagaInstanceByCorrelationId(correlationId) as any;
     if (!saga) return;
     
-    // Idempotency check: If already completed, do nothing
     if (saga.status === "COMPLETED") return;
     
-    // Ensure we are in the correct state to process payment
     if (saga.status !== "ESCROW_CREATED") {
         throw new Error(`Invalid saga state for payment completion: ${saga.status}`);
     }
@@ -93,17 +84,14 @@ export class EscrowSaga {
     const escrow = await this.escrowRepo.getById(saga.escrowId);
     if (!escrow) throw new Error("Escrow not found");
 
-    // Idempotent Domain Transition
     if (escrow.canBeLocked()) {
         escrow.lock();
         escrow.updateLedgerAccounts(escrowLedgerAccountId);
         await this.escrowRepo.update(escrow);
     }
 
-    // Atomic Saga Update
     await this.escrowRepo.updateSagaStatus(correlationId, "COMPLETED");
 
-    // Replayable Outbox Event
     await this.escrowRepo.saveOutboxEvent({
       eventId: uuidv4(),
       aggregateType: "escrow",
@@ -111,26 +99,23 @@ export class EscrowSaga {
       eventType: "EscrowSagaCompleted",
       version: 1,
       payload: { 
-        escrowId: escrow.id, 
+        escrowId: escrow.id!, 
         status: "LOCKED",
-        timestamp: new Date().toISOString() // Deterministic representation
+        timestamp: new Date().toISOString()
       },
       correlationId,
       idempotencyKey: `saga_completed_${correlationId}`,
       status: "pending",
-    } as any);
+    });
   }
 
   /**
    * Handle Payment Failure (Task 4)
    */
   async handlePaymentFailed(correlationId: string, reason: string): Promise<void> {
-    const saga = await this.escrowRepo.getSagaInstanceByCorrelationId(correlationId);
+    const saga = await this.escrowRepo.getSagaInstanceByCorrelationId(correlationId) as any;
     if (!saga) return;
 
     await this.escrowRepo.updateSagaStatus(correlationId, "FAILED", reason);
-    
-    // Compensation logic would go here if needed
-    // For now, we mark as FAILED to ensure determinism
   }
 }
