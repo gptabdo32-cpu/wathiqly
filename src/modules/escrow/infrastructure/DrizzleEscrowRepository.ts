@@ -6,11 +6,11 @@ import { outboxEvents } from "../../../infrastructure/db/schema_outbox";
 import { getDb } from "../../../infrastructure/db";
 import { EscrowMapper } from "./EscrowMapper";
 import { TransactionManager, DbTransaction } from "../../../core/db/TransactionManager";
+import { Logger } from "../../../core/observability/Logger";
 
 /**
- * DrizzleEscrowRepository
- * RULE 17: Enforce module boundaries
- * RULE 13: Remove all "any" types
+ * DrizzleEscrowRepository (Rule 11: Outbox Hardening)
+ * MISSION: Ensure reliable event persistence and domain state updates.
  */
 export class DrizzleEscrowRepository implements IEscrowRepository {
   async create(escrow: Escrow, tx?: DbTransaction): Promise<number> {
@@ -93,18 +93,36 @@ export class DrizzleEscrowRepository implements IEscrowRepository {
       .where(eq(disputes.id, id));
   }
 
+  /**
+   * Rule 11: Outbox Hardening
+   * MISSION: Guarantee at-least-once delivery with retry tracking.
+   */
   async saveOutboxEvent(event: OutboxEventInput, tx?: DbTransaction): Promise<void> {
     const db = tx || (await getDb());
-    await db.insert(outboxEvents).values({
-      eventId: event.eventId,
-      aggregateType: event.aggregateType,
-      aggregateId: event.aggregateId,
-      eventType: event.eventType,
-      version: event.version,
-      payload: event.payload,
-      correlationId: event.correlationId,
-      idempotencyKey: event.idempotencyKey,
-      status: event.status
-    });
+    
+    Logger.info(`[Outbox][CID:${event.correlationId}] Saving event: ${event.eventType} (${event.eventId})`);
+
+    try {
+      await db.insert(outboxEvents).values({
+        eventId: event.eventId,
+        aggregateType: event.aggregateType,
+        aggregateId: event.aggregateId.toString(),
+        eventType: event.eventType,
+        version: event.version,
+        payload: event.payload,
+        correlationId: event.correlationId,
+        idempotencyKey: event.idempotencyKey,
+        status: "pending",
+        retries: 0, // Rule 11: Initialize retries
+        createdAt: new Date(),
+      });
+    } catch (error: any) {
+      // Rule 7: Idempotency (End-to-End)
+      if (error.code === 'ER_DUP_ENTRY' || error.message?.includes('Duplicate entry')) {
+        Logger.warn(`[Outbox] Duplicate event detected: ${event.eventId}. Skipping.`);
+        return;
+      }
+      throw error;
+    }
   }
 }

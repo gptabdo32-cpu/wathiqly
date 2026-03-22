@@ -1,8 +1,9 @@
 import { z } from "zod";
+import { EventSecurity } from "../security/EventSecurity";
 
 /**
  * Event Contract Registry (Rule 4, 17, 18)
- * MISSION: Enforce strict schema validation and versioning for all events.
+ * MISSION: Enforce strict schema validation, versioning, and security for all events.
  */
 
 export const EventHeaderSchema = z.object({
@@ -10,11 +11,12 @@ export const EventHeaderSchema = z.object({
   eventType: z.string(),
   aggregateType: z.string(),
   aggregateId: z.union([z.string(), z.number()]),
-  version: z.number().int().positive(),
+  version: z.number().int().positive(), // Rule 6: Event Versioning
   correlationId: z.string().uuid(),
   causationId: z.string().uuid().optional(),
   timestamp: z.string().datetime(),
   idempotencyKey: z.string(),
+  signature: z.string().optional(), // Rule 5: Event Security Layer
 });
 
 export type EventHeader = z.infer<typeof EventHeaderSchema>;
@@ -77,7 +79,8 @@ export type EventType = keyof typeof EventSchemas;
 export function validateEvent<T extends EventType>(
   type: T,
   header: unknown,
-  payload: unknown
+  payload: unknown,
+  shouldSign: boolean = true
 ) {
   const validatedHeader = EventHeaderSchema.parse(header);
   const schema = EventSchemas[type];
@@ -86,9 +89,24 @@ export function validateEvent<T extends EventType>(
   }
   const validatedPayload = schema.parse(payload);
   
-  return {
+  const event = {
     ...validatedHeader,
     eventType: type,
     payload: validatedPayload as z.infer<typeof schema>,
   };
+
+  // Rule 5: Add signature if requested
+  if (shouldSign && !event.signature) {
+    event.signature = EventSecurity.sign(event.payload);
+  }
+
+  // Rule 5: Validate signature if present
+  if (event.signature) {
+    const isValid = EventSecurity.validate(event.payload, event.signature);
+    if (!isValid) {
+      throw new Error(`Invalid event signature for event ${event.eventId}`);
+    }
+  }
+  
+  return event;
 }
