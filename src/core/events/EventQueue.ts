@@ -1,5 +1,6 @@
 import { Queue, Worker, Job } from 'bullmq';
-import { Gauge, Counter } from 'prom-client'; // For Prometheus metrics
+import { Gauge, Counter, Histogram } from 'prom-client'; // For Prometheus metrics
+import { eventHandlerLatency } from '../observability/metricsServer';
 import { eventBus } from './EventBus';
 import IORedis from 'ioredis';
 import { Logger } from '../observability/Logger';
@@ -18,7 +19,11 @@ const eventQueueDepth = new Gauge({
   labelNames: ['queue_name'],
 });
 
-const eventProcessingLatency = new Gauge({
+// const eventProcessingLatency = new Gauge({ // Replaced by eventHandlerLatency
+//   name: 'wathiqly_event_processing_latency_seconds',
+//   help: 'Latency of event processing in seconds',
+//   labelNames: ['event_type', 'worker_id', 'status'],
+// });
   name: 'wathiqly_event_processing_latency_seconds',
   help: 'Latency of event processing in seconds',
   labelNames: ['event_type', 'worker_id', 'status'],
@@ -85,7 +90,10 @@ export const eventQueue = new Queue('event-queue', {
 export const eventWorker = new Worker('event-queue', async (job: Job<EventPayload>) => {
   const { event, payload, correlationId, idempotencyKey } = job.data;
   
-  const startTime = process.hrtime.bigint();
+    const handlerName = `handle_${event}`;
+    let startTime: bigint = process.hrtime.bigint();
+    let duration: number = 0;
+
   Logger.info(`[EventWorker] Processing event: ${event}`, { 
     correlationId,
     jobId: job.id,
@@ -120,9 +128,9 @@ export const eventWorker = new Worker('event-queue', async (job: Job<EventPayloa
       .where(eq(outboxEvents.idempotencyKey, validated.idempotencyKey));
 
     const endTime = process.hrtime.bigint();
-    const duration = Number(endTime - startTime) / 1_000_000_000; // Convert nanoseconds to seconds
-    eventProcessingLatency.set({ event_type: event, worker_id: 'EventWorker-1', status: 'completed' }, duration);
-    Logger.metric('event_processing_latency_seconds', duration, { event_type: event, worker_id: 'EventWorker-1', status: 'completed' });
+    duration = Number(endTime - startTime) / 1_000_000_000; // Convert nanoseconds to seconds
+    eventHandlerLatency.observe({ event_type: event, handler_name: handlerName, status: 'completed' }, duration);
+    Logger.metric('event_handler_latency_seconds', duration, { event_type: event, handler_name: handlerName, status: 'completed' });
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -134,7 +142,8 @@ export const eventWorker = new Worker('event-queue', async (job: Job<EventPayloa
     });
     eventJobFailuresTotal.inc({ event_type: event, worker_id: 'EventWorker-1', reason: errorMessage });
     Logger.metric('event_job_failures_total', 1, { event_type: event, worker_id: 'EventWorker-1', reason: errorMessage });
-    
+    duration = Number(process.hrtime.bigint() - startTime) / 1_000_000_000; // Calculate duration for failure
+    eventHandlerLatency.observe({ event_type: event, handler_name: handlerName, status: 'failed' }, duration);
     // Update outbox with error and retry count
     const db = await getDb();
     await db.update(outboxEvents)

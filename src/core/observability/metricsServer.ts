@@ -28,6 +28,13 @@ export const sagaActiveGauge = new Gauge({
 });
 
 // HTTP Metrics
+export const eventHandlerLatency = new Histogram({
+  name: 'wathiqly_event_handler_latency_seconds',
+  help: 'Duration of event handler execution in seconds',
+  labelNames: ['event_type', 'handler_name', 'status'],
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5],
+});
+
 export const httpRequestDuration = new Histogram({
   name: 'wathiqly_http_request_duration_seconds',
   help: 'Duration of HTTP requests in seconds',
