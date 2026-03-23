@@ -28,7 +28,11 @@ export class SagaManager {
   }): Promise<void> {
     const db = params.tx || (await getDb());
     
-    Logger.info(`[SagaManager][CID:${params.correlationId}] Saving saga state: ${params.sagaId} (${params.status})`);
+    Logger.info(`[SagaManager] Saving saga state: ${params.sagaId}`, { 
+      correlationId: params.correlationId, 
+      sagaId: params.sagaId, 
+      status: params.status 
+    });
 
     const schema = SagaStateSchemas[params.type];
     if (!schema) {
@@ -78,7 +82,10 @@ export class SagaManager {
         });
       }
     } catch (error) {
-      Logger.error(`[SagaManager][CID:${params.correlationId}] Failed to save saga state`, error);
+      Logger.error(`[SagaManager] Failed to save saga state`, error, { 
+        correlationId: params.correlationId, 
+        sagaId: params.sagaId 
+      });
       throw error;
     }
   }

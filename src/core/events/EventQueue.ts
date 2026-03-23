@@ -52,9 +52,13 @@ export const eventQueue = new Queue('event-queue', {
 export const eventWorker = new Worker('event-queue', async (job: Job<EventPayload>) => {
   const { event, payload, correlationId, idempotencyKey } = job.data;
   
-  Logger.info(`[EventWorker][CID:${correlationId}] Processing event: ${event}`, { 
+  Logger.info(`[EventWorker] Processing event: ${event}`, { 
+    correlationId,
     jobId: job.id,
-    idempotencyKey 
+    idempotencyKey,
+    status: "processing",
+    retryCount: job.attemptsMade,
+    workerId: "EventWorker-1"
   });
   
   // Rule 12: Strict input validation
@@ -79,7 +83,12 @@ export const eventWorker = new Worker('event-queue', async (job: Job<EventPayloa
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    Logger.error(`[EventWorker][CID:${correlationId}] CRITICAL: Handler failed for ${event}: ${errorMessage}`);
+    Logger.error(`[EventWorker] CRITICAL: Handler failed for ${event}`, error, { 
+      correlationId,
+      status: "failed",
+      retryCount: job.attemptsMade,
+      workerId: "EventWorker-1"
+    });
     
     // Update outbox with error and retry count
     const db = await getDb();
@@ -105,9 +114,11 @@ eventWorker.on('completed', (job) => {
 
 eventWorker.on('failed', (job, err) => {
   const errorMessage = err instanceof Error ? err.message : String(err);
-  Logger.error(`[EventWorker] Job ${job?.id} failed after ${job?.attemptsMade} attempts: ${errorMessage}`, {
+  Logger.error(`[EventWorker] Job ${job?.id} failed`, err, {
     correlationId: job?.data?.correlationId,
-    idempotencyKey: job?.data?.idempotencyKey
+    idempotencyKey: job?.data?.idempotencyKey,
+    retryCount: job?.attemptsMade,
+    status: "failed"
   });
   
   // Improvement 6: DLQ for failed events

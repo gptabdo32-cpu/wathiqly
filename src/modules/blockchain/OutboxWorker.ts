@@ -79,7 +79,10 @@ export class OutboxWorker {
 
       if (pendingEvents.length === 0) return;
 
-      Logger.info(`[OutboxWorker] Found ${pendingEvents.length} events to process`);
+      Logger.info(`[OutboxWorker] Found ${pendingEvents.length} events to process`, { 
+        workerId: "OutboxWorker-1", 
+        batchSize: pendingEvents.length 
+      });
 
       // Step 2: Process events
       for (const event of pendingEvents) {
@@ -104,7 +107,13 @@ export class OutboxWorker {
         })
         .where(eq(outboxEvents.id, event.id));
 
-      Logger.info(`[Outbox][CID:${correlationId}] Processing event: ${event.eventType}`, { eventId: event.eventId });
+      Logger.info(`[Outbox] Processing event: ${event.eventType}`, { 
+        correlationId, 
+        eventId: event.eventId,
+        status: "processing",
+        retryCount: event.retries,
+        workerId: "OutboxWorker-1"
+      });
       
       // Dispatch to Queue (which eventually calls executeHandlers)
       await publishToQueue({
@@ -116,12 +125,11 @@ export class OutboxWorker {
         aggregateType: event.aggregateType
       });
 
-      // The queue worker will update status to 'completed' upon successful execution.
-      // However, for direct outbox-to-queue reliability, we consider the 'dispatch' successful here.
-      // In a more robust setup, the queue worker would be the one to mark 'completed'.
-      // Given the current architecture in EventQueue.ts, it already updates outboxEvents to 'completed'.
-      
-      Logger.info(`[Outbox][CID:${correlationId}] Event ${event.eventType} dispatched to queue`);
+      Logger.info(`[Outbox] Event ${event.eventType} dispatched to queue`, { 
+        correlationId, 
+        eventId: event.eventId,
+        status: "dispatched"
+      });
 
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : "Unknown outbox dispatch error";
@@ -136,7 +144,12 @@ export class OutboxWorker {
         })
         .where(eq(outboxEvents.id, event.id));
         
-      Logger.error(`[Outbox][CID:${correlationId}] Dispatch failed: ${event.eventType}`, error, { status });
+      Logger.error(`[Outbox] Dispatch failed: ${event.eventType}`, error, { 
+        correlationId, 
+        eventId: event.eventId,
+        status,
+        retryCount: event.retries + 1
+      });
       
       if (isDeadLetter) {
         await this.handleDeadLetter(event, errorMessage);
