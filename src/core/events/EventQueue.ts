@@ -34,13 +34,14 @@ export const eventQueue = new Queue('event-queue', {
   connection,
   defaultJobOptions: {
     // Improvement 7: Retry Strategy with exponential backoff
-    attempts: 5, 
+    // We set 10 attempts to match our OutboxWorker's MAX_RETRIES for full reliability.
+    attempts: 10, 
     backoff: {
       type: 'exponential',
-      delay: 1000,
+      delay: 2000, // Start with 2 seconds, then 4, 8, 16...
     },
     removeOnComplete: true,
-    removeOnFail: false, // Keep in failed set (DLQ equivalent)
+    removeOnFail: false, // Keep in failed set (DLQ equivalent) for manual inspection
   }
 });
 
