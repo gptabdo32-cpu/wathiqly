@@ -5,6 +5,7 @@ import { Escrow } from "../../domain/Escrow";
 import { SagaManager } from "../../../../core/events/SagaManager";
 import { eventBus } from "../../../../core/events/EventBus"; // استيراد eventBus
 import { IdempotencyManager } from "../../../../core/events/IdempotencyManager"; // استيراد IdempotencyManager
+import { v4 as uuidv4 } from 'uuid';
 
 export interface CreateEscrowInput {
   buyerId: number;
@@ -26,6 +27,7 @@ export class CreateEscrow {
   ) {}
 
   async execute(params: CreateEscrowInput, correlationId: string) {
+    Logger.info(`[CreateEscrow] Starting escrow creation for buyer ${params.buyerId} and seller ${params.sellerId}`, { correlationId });
 
     // Deterministic Idempotency Key based on input parameters
     const idempotencyKey = `escrow_init_${params.buyerId}_${params.sellerId}_${params.amount}_${correlationId}`;
