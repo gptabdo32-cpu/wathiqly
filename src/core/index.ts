@@ -10,10 +10,13 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { initializeSubscribers } from "./events/Subscribers";
+import { OutboxWorker } from "../modules/blockchain/OutboxWorker";
+import { SagaRecoveryEngine } from "./events/SagaRecoveryEngine";
 import { generalLimiter, authLimiter, helmetConfig, mongoSanitizeMiddleware, xssCleanMiddleware, hppMiddleware, securityHeadersMiddleware } from "./security";
 import multer from "multer";
 import { storagePut } from "../storage";
 import { nanoid } from "nanoid";
+import { Logger } from "./observability/Logger";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -37,6 +40,15 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   // Initialize Smart Event Bus System
   initializeSubscribers();
+
+  // Initialize Background Workers (Execution Layer)
+  const outboxWorker = new OutboxWorker();
+  outboxWorker.start();
+
+  const sagaRecoveryEngine = new SagaRecoveryEngine();
+  sagaRecoveryEngine.start();
+
+  Logger.info("Background Workers (Outbox + Saga Recovery) started successfully.");
 
   const app = express();
   const server = createServer(app);
