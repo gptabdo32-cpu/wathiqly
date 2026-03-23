@@ -43,6 +43,39 @@ export class EventBus {
    * نشر حدث إلى Outbox لضمان التسليم.
    * يجب أن يتم استدعاء هذه الوظيفة داخل معاملة قاعدة بيانات.
    */
+  private handlers: Map<string, Array<(data: any) => Promise<void>>> = new Map();
+
+  /**
+   * تسجيل معالج لحدث معين.
+   */
+  public subscribe(event: string, handler: (data: any) => Promise<void>): void {
+    const handlers = this.handlers.get(event) || [];
+    handlers.push(handler);
+    this.handlers.set(event, handlers);
+    Logger.info(`[EventBus] Subscribed to event: ${event}`);
+  }
+
+  /**
+   * تنفيذ المعالجات المسجلة لحدث معين.
+   */
+  public async executeHandlers(event: string, data: any): Promise<void> {
+    const handlers = this.handlers.get(event) || [];
+    if (handlers.length === 0) {
+      Logger.warn(`[EventBus] No handlers found for event: ${event}`);
+      return;
+    }
+
+    Logger.info(`[EventBus] Executing ${handlers.length} handlers for event: ${event}`, { 
+      correlationId: data.correlationId 
+    });
+
+    await Promise.all(handlers.map(handler => handler(data)));
+  }
+
+  /**
+   * نشر حدث إلى Outbox لضمان التسليم.
+   * يجب أن يتم استدعاء هذه الوظيفة داخل معاملة قاعدة بيانات.
+   */
   public async publish(event: string, data: {
     payload: Record<string, unknown>;
     correlationId: string;
@@ -62,8 +95,8 @@ export class EventBus {
 
     await tx.insert(outboxEvents).values({
       eventId,
-      aggregateType: data.aggregateType || "unknown", // يجب تحديد نوع التجميع المناسب هنا
-      aggregateId: String(data.aggregateId || "unknown"),   // يجب تحديد معرف التجميع المناسب هنا
+      aggregateType: data.aggregateType || "unknown",
+      aggregateId: String(data.aggregateId || "unknown"),
       eventType: event,
       version: 1,
       payload: data.payload,
