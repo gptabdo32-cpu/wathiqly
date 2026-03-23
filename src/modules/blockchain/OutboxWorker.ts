@@ -1,25 +1,25 @@
 import { eq, and, or, lt, sql } from "drizzle-orm";
-import { Gauge } from 'prom-client';
+import { Gauge, Counter } from 'prom-client';
 import { outboxEvents } from "../../infrastructure/db/schema_outbox";
 import { getDb } from "../../infrastructure/db";
 import { Logger } from "../../core/observability/Logger";
 import { publishToQueue } from "../../core/events/EventQueue";
 
-// Prometheus Gauges for OutboxWorker
+// Prometheus Metrics for OutboxWorker
 const outboxProcessingLatency = new Gauge({
-  name: 'outbox_processing_latency_seconds',
+  name: 'wathiqly_outbox_processing_latency_seconds',
   help: 'Latency of outbox event processing in seconds',
   labelNames: ['event_type', 'worker_id', 'status'],
 });
 
-const outboxEventRetriesTotal = new Gauge({
-  name: 'outbox_event_retries_total',
+const outboxEventRetriesTotal = new Counter({
+  name: 'wathiqly_outbox_event_retries_total',
   help: 'Total number of retries for outbox events',
   labelNames: ['event_type', 'worker_id'],
 });
 
-const outboxEventFailuresTotal = new Gauge({
-  name: 'outbox_event_failures_total',
+const outboxEventFailuresTotal = new Counter({
+  name: 'wathiqly_outbox_event_failures_total',
   help: 'Total number of failed outbox events',
   labelNames: ['event_type', 'worker_id', 'reason'],
 });
