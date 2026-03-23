@@ -1,3 +1,4 @@
+import { EscrowSagaState, SagaStatus } from "../../../core/events/SagaTypes";
 import { IEscrowRepository } from "../domain/IEscrowRepository";
 import { Escrow } from "../domain/Escrow";
 import { v4 as uuidv4 } from 'uuid';
@@ -6,7 +7,7 @@ import { AtomicSagaExecutor } from "../../../core/events/AtomicSagaExecutor";
 import { Logger } from "../../../core/observability/Logger";
 import { validateEvent, EventSchemas } from "../../../core/events/EventContract";
 import { z } from "zod";
-import { EscrowSagaState, SagaStatus } from "../../../core/events/SagaTypes";
+import { sagaTotalCounter, sagaActiveGauge } from "../../../core/observability/metricsServer";
 
 export interface EscrowSagaInput {
   buyerId: number;
@@ -71,6 +72,9 @@ export class EscrowSaga {
           correlationId,
           tx
         });
+
+        sagaTotalCounter.inc({ type: this.SAGA_TYPE, status: "STARTED" });
+        sagaActiveGauge.inc({ type: this.SAGA_TYPE });
 
         await this.publishEvent("escrow.created", escrowId, {
           escrowId,
@@ -167,6 +171,9 @@ export class EscrowSaga {
           correlationId,
           tx
         });
+
+        sagaTotalCounter.inc({ type: this.SAGA_TYPE, status: "COMPLETED" });
+        sagaActiveGauge.dec({ type: this.SAGA_TYPE });
 
         await this.publishEvent("escrow.saga.completed", escrowId, {
           escrowId,
@@ -276,6 +283,9 @@ export class EscrowSaga {
       correlationId,
       tx
     });
+
+    sagaTotalCounter.inc({ type: this.SAGA_TYPE, status: "FAILED" });
+    sagaActiveGauge.dec({ type: this.SAGA_TYPE });
   }
 
   private async ensureSagaState(sagaId: string, correlationId: string): Promise<EscrowSagaState> {
