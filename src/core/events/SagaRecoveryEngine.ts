@@ -1,5 +1,5 @@
 import { eq, and, or, lt, sql } from "drizzle-orm";
-import { Gauge } from 'prom-client';
+import { Counter } from 'prom-client';
 import { sagaStates } from "../../infrastructure/db/schema_saga";
 import { getDb } from "../../infrastructure/db";
 import { Logger } from "../observability/Logger";
@@ -7,7 +7,7 @@ import { container } from "../di/container";
 import { EscrowSaga } from "../../modules/escrow/application/EscrowSaga";
 
 // Prometheus Gauge for Saga Recovery
-const sagaRecoveryCount = new Gauge({
+const sagaRecoveryCount = new Counter({
   name: 'saga_recovery_total',
   help: 'Total number of sagas recovered by the engine',
   labelNames: ['saga_type', 'saga_status'],
@@ -71,7 +71,7 @@ export class SagaRecoveryEngine {
 
     if (stalledSagas.length === 0) return;
 
-    Logger.info(`[SagaRecoveryEngine] Found ${stalledSagas.length} stalled sagas to recover`);
+    Logger.info(`[SagaRecoveryEngine] Found ${stalledSagas.length} stalled sagas to recover`, { count: stalledSagas.length });
     // Increment recovery count for each stalled saga found
     stalledSagas.forEach(saga => {
       sagaRecoveryCount.inc({ saga_type: saga.type, saga_status: saga.status });
@@ -87,7 +87,7 @@ export class SagaRecoveryEngine {
    * Resumes a specific saga based on its type and current state.
    */
   private async resumeSaga(saga: any) {
-    Logger.info(`[SagaRecoveryEngine] Resuming saga ${saga.sagaId} (Type: ${saga.type}, Status: ${saga.status})`);
+    Logger.info(`[SagaRecoveryEngine] Resuming saga ${saga.sagaId} (Type: ${saga.type}, Status: ${saga.status})`, { sagaId: saga.sagaId, sagaType: saga.type, sagaStatus: saga.status, correlationId: saga.correlationId });
     
     try {
       if (saga.type === "ESCROW_SAGA") {
@@ -97,7 +97,7 @@ export class SagaRecoveryEngine {
         // Logic to determine which step to re-run
         // In a real system, each saga would implement a 'resume' method
         // For now, we log the attempt. The idempotent handlers will ensure safety.
-        Logger.info(`[SagaRecoveryEngine] Re-triggering last step for EscrowSaga: ${state.currentStep}`);
+        Logger.info(`[SagaRecoveryEngine] Re-triggering last step for EscrowSaga: ${state.currentStep}`, { sagaId: saga.sagaId, correlationId: saga.correlationId, currentStep: state.currentStep });
         
         // We can re-emit the last event or call the handler directly if safe.
         // Given our architecture, re-running the use-case or step with the same correlationId
@@ -111,7 +111,7 @@ export class SagaRecoveryEngine {
         .where(eq(sagaStates.sagaId, saga.sagaId));
 
     } catch (error) {
-      Logger.error(`[SagaRecoveryEngine] Failed to resume saga ${saga.sagaId}`, error);
+      Logger.error(`[SagaRecoveryEngine] Failed to resume saga ${saga.sagaId}`, error, { sagaId: saga.sagaId, correlationId: saga.correlationId });
     }
   }
 }

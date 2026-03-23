@@ -2,6 +2,7 @@ import { getDb } from "../../infrastructure/db";
 import { sagaStates } from "../../infrastructure/db/schema_saga";
 import { eq, and } from "drizzle-orm";
 import { Logger } from "../observability/Logger";
+import { Counter } from 'prom-client';
 import { SagaStatus, SagaType, SagaStateSchemas } from "./SagaTypes";
 import { DbTransaction } from "../db/TransactionManager"; // استيراد DbTransaction
 
@@ -11,6 +12,11 @@ import { DbTransaction } from "../db/TransactionManager"; // استيراد DbTr
  * Handles persistence and state transitions for all Sagas.
  */
 export class SagaManager {
+  private static sagaStateChanges = new Counter({
+    name: 'wathiqly_saga_state_changes_total',
+    help: 'Total number of saga state transitions',
+    labelNames: ['saga_type', 'from_status', 'to_status'],
+  });
   /**
    * Initialize or update saga state in the database
    */
@@ -33,6 +39,19 @@ export class SagaManager {
       sagaId: params.sagaId, 
       status: params.status 
     });
+
+    let oldStatus: string | undefined;
+    if (existing.length > 0) {
+      oldStatus = existing[0].status;
+    }
+
+    if (oldStatus && oldStatus !== params.status) {
+      SagaManager.sagaStateChanges.inc({ saga_type: params.type, from_status: oldStatus, to_status: params.status });
+      Logger.metric('saga_state_changes_total', 1, { saga_type: params.type, from_status: oldStatus, to_status: params.status });
+    } else if (!oldStatus) {
+      SagaManager.sagaStateChanges.inc({ saga_type: params.type, from_status: 'none', to_status: params.status });
+      Logger.metric('saga_state_changes_total', 1, { saga_type: params.type, from_status: 'none', to_status: params.status });
+    }
 
     const schema = SagaStateSchemas[params.type];
     if (!schema) {
