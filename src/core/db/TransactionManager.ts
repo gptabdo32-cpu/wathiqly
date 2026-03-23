@@ -7,6 +7,7 @@ export type DbTransaction = MySqlTransaction<any, any>;
 
 export interface TransactionContext {
   tx: DbTransaction;
+  correlationId?: string;
 }
 
 export class TransactionManager {
@@ -26,7 +27,7 @@ export class TransactionManager {
           const err = error as { code?: string; message: string };
           if (err.code) throw error;
           
-          Logger.error("[TransactionManager] Operation inside transaction failed", error);
+          Logger.error("[TransactionManager] Operation inside transaction failed", error, { correlationId: context.correlationId });
           throw new TransactionError("Operation inside transaction failed", error instanceof Error ? error : new Error(String(error)));
         }
       });
@@ -34,7 +35,7 @@ export class TransactionManager {
       const err = error as { code?: string; message: string };
       if (err.code) throw error;
       
-      Logger.error("[TransactionManager] Transaction execution failed", error);
+      Logger.error("[TransactionManager] Transaction execution failed", error, { correlationId: "unknown" }); // correlationId might not be available at this top-level catch
       throw new TransactionError("Transaction execution failed", error instanceof Error ? error : new Error(String(error)));
     }
   }
