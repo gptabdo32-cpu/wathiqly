@@ -1,5 +1,5 @@
 import { Queue, Worker, Job } from 'bullmq';
-import { Gauge } from 'prom-client'; // For Prometheus metrics
+import { Gauge, Counter } from 'prom-client'; // For Prometheus metrics
 import { eventBus } from './EventBus';
 import IORedis from 'ioredis';
 import { Logger } from '../observability/Logger';
@@ -11,27 +11,27 @@ import { eq } from 'drizzle-orm';
 const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
 const connection = new IORedis(REDIS_URL, { maxRetriesPerRequest: null });
 
-// Prometheus Gauges
+// Prometheus Metrics
 const eventQueueDepth = new Gauge({
-  name: 'event_queue_depth',
+  name: 'wathiqly_event_queue_depth',
   help: 'Current depth of the event queue',
   labelNames: ['queue_name'],
 });
 
 const eventProcessingLatency = new Gauge({
-  name: 'event_processing_latency_seconds',
+  name: 'wathiqly_event_processing_latency_seconds',
   help: 'Latency of event processing in seconds',
   labelNames: ['event_type', 'worker_id', 'status'],
 });
 
-const eventJobRetriesTotal = new Gauge({
-  name: 'event_job_retries_total',
+const eventJobRetriesTotal = new Counter({
+  name: 'wathiqly_event_job_retries_total',
   help: 'Total number of retries for event jobs',
   labelNames: ['event_type', 'worker_id'],
 });
 
-const eventJobFailuresTotal = new Gauge({
-  name: 'event_job_failures_total',
+const eventJobFailuresTotal = new Counter({
+  name: 'wathiqly_event_job_failures_total',
   help: 'Total number of failed event jobs',
   labelNames: ['event_type', 'worker_id', 'reason'],
 });
