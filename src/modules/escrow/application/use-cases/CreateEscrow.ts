@@ -1,7 +1,7 @@
 import { TransactionManager } from "../../../../core/db/TransactionManager";
 import { IEscrowRepository } from "../../domain/IEscrowRepository";
 import { Escrow } from "../../domain/Escrow";
-import { v4 as uuidv4 } from 'uuid';
+
 import { SagaManager } from "../../../../core/events/SagaManager";
 import { eventBus } from "../../../../core/events/EventBus"; // استيراد eventBus
 import { IdempotencyManager } from "../../../../core/events/IdempotencyManager"; // استيراد IdempotencyManager
@@ -25,8 +25,8 @@ export class CreateEscrow {
     private escrowRepo: IEscrowRepository
   ) {}
 
-  async execute(params: CreateEscrowInput) {
-    const correlationId = uuidv4();
+  async execute(params: CreateEscrowInput, correlationId: string) {
+
     // Deterministic Idempotency Key based on input parameters
     const idempotencyKey = `escrow_init_${params.buyerId}_${params.sellerId}_${params.amount}_${correlationId}`;
 

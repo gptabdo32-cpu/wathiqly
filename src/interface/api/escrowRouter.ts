@@ -15,7 +15,7 @@ export const escrowRouter = router({
         amount: input.amount,
         description: input.description,
         sellerWalletAddress: input.sellerWalletAddress,
-      });
+      }, ctx.correlationId);
       return { success: true, escrowId };
     }),
 

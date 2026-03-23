@@ -24,6 +24,7 @@ const requireUser = t.middleware(async (opts) => {
     ctx: {
       ...ctx,
       user: ctx.user,
+      correlationId: ctx.correlationId,
     },
   });
 });
@@ -40,6 +41,7 @@ const requireAdmin = t.middleware(async (opts) => {
     ctx: {
       ...ctx,
       user: ctx.user,
+      correlationId: ctx.correlationId,
     },
   });
 });
