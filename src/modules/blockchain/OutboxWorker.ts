@@ -195,6 +195,7 @@ export class OutboxWorker {
     Logger.error(
       `[Outbox][DLQ][CID:${event.correlationId}] Event ${event.eventType} (ID: ${event.eventId}) moved to Dead Letter Queue.`,
       { 
+        correlationId: event.correlationId,
         eventId: event.eventId,
         error: errorMessage,
         payload: event.payload
