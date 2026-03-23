@@ -38,7 +38,7 @@ export class OutboxWorker {
   public start() {
     if (this.isRunning) return;
     this.isRunning = true;
-    Logger.info("OutboxWorker started (Reliable Execution Mode)");
+    Logger.info("OutboxWorker started (Reliable Execution Mode)", { workerId: "OutboxWorker-1" });
     this.runLoop();
   }
 
@@ -47,7 +47,7 @@ export class OutboxWorker {
       try {
         await this.processPendingEvents();
       } catch (error) {
-        Logger.error("[OutboxWorker] Loop error", error);
+        Logger.error("[OutboxWorker] Loop error", error, { workerId: "OutboxWorker-1" });
       }
       await new Promise(resolve => setTimeout(resolve, this.POLL_INTERVAL_MS));
     }

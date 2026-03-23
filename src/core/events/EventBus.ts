@@ -88,7 +88,8 @@ export class EventBus {
     const eventId = data.eventId || uuidv4();
     const timestamp = new Date().toISOString();
 
-    Logger.info(`[EventBus][CID:${data.correlationId}] Publishing event to Outbox: ${event}`, {
+    Logger.info(`[EventBus] Publishing event to Outbox: ${event}`, {
+        correlationId: data.correlationId,
         eventId,
         type: event,
         timestamp,
