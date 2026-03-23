@@ -19,11 +19,7 @@ const eventQueueDepth = new Gauge({
   labelNames: ['queue_name'],
 });
 
-// const eventProcessingLatency = new Gauge({ // Replaced by eventHandlerLatency
-//   name: 'wathiqly_event_processing_latency_seconds',
-//   help: 'Latency of event processing in seconds',
-//   labelNames: ['event_type', 'worker_id', 'status'],
-// });
+const eventProcessingLatency = new Gauge({
   name: 'wathiqly_event_processing_latency_seconds',
   help: 'Latency of event processing in seconds',
   labelNames: ['event_type', 'worker_id', 'status'],
@@ -90,9 +86,9 @@ export const eventQueue = new Queue('event-queue', {
 export const eventWorker = new Worker('event-queue', async (job: Job<EventPayload>) => {
   const { event, payload, correlationId, idempotencyKey } = job.data;
   
-    const handlerName = `handle_${event}`;
-    let startTime: bigint = process.hrtime.bigint();
-    let duration: number = 0;
+  const handlerName = `handle_${event}`;
+  let startTime: bigint = process.hrtime.bigint();
+  let duration: number = 0;
 
   Logger.info(`[EventWorker] Processing event: ${event}`, { 
     correlationId,
