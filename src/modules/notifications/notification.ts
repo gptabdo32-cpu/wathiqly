@@ -64,7 +64,8 @@ const validatePayload = (input: NotificationPayload): NotificationPayload => {
  * bubble up as TRPC errors so callers can fix the payload.
  */
 export async function notifyOwner(
-  payload: NotificationPayload
+  payload: NotificationPayload,
+  correlationId?: string
 ): Promise<boolean> {
   const { title, content } = validatePayload(payload);
 
@@ -93,7 +94,7 @@ export async function notifyOwner(
         "content-type": "application/json",
         "connect-protocol-version": "1",
       },
-      body: JSON.stringify({ title, content }),
+      body: JSON.stringify({ title, content, correlationId }),
     });
 
     if (!response.ok) {
