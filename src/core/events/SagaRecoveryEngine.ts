@@ -1,9 +1,17 @@
 import { eq, and, or, lt, sql } from "drizzle-orm";
+import { Gauge } from 'prom-client';
 import { sagaStates } from "../../infrastructure/db/schema_saga";
 import { getDb } from "../../infrastructure/db";
 import { Logger } from "../observability/Logger";
 import { container } from "../di/container";
 import { EscrowSaga } from "../../modules/escrow/application/EscrowSaga";
+
+// Prometheus Gauge for Saga Recovery
+const sagaRecoveryCount = new Gauge({
+  name: 'saga_recovery_total',
+  help: 'Total number of sagas recovered by the engine',
+  labelNames: ['saga_type', 'saga_status'],
+});
 
 /**
  * Saga Recovery Engine
@@ -64,6 +72,11 @@ export class SagaRecoveryEngine {
     if (stalledSagas.length === 0) return;
 
     Logger.info(`[SagaRecoveryEngine] Found ${stalledSagas.length} stalled sagas to recover`);
+    // Increment recovery count for each stalled saga found
+    stalledSagas.forEach(saga => {
+      sagaRecoveryCount.inc({ saga_type: saga.type, saga_status: saga.status });
+      Logger.metric('saga_recovery_total', 1, { saga_type: saga.type, saga_status: saga.status });
+    });
 
     for (const saga of stalledSagas) {
       await this.resumeSaga(saga);

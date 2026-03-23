@@ -1,8 +1,28 @@
 import { eq, and, or, lt, sql } from "drizzle-orm";
+import { Gauge } from 'prom-client';
 import { outboxEvents } from "../../infrastructure/db/schema_outbox";
 import { getDb } from "../../infrastructure/db";
 import { Logger } from "../../core/observability/Logger";
 import { publishToQueue } from "../../core/events/EventQueue";
+
+// Prometheus Gauges for OutboxWorker
+const outboxProcessingLatency = new Gauge({
+  name: 'outbox_processing_latency_seconds',
+  help: 'Latency of outbox event processing in seconds',
+  labelNames: ['event_type', 'worker_id', 'status'],
+});
+
+const outboxEventRetriesTotal = new Gauge({
+  name: 'outbox_event_retries_total',
+  help: 'Total number of retries for outbox events',
+  labelNames: ['event_type', 'worker_id'],
+});
+
+const outboxEventFailuresTotal = new Gauge({
+  name: 'outbox_event_failures_total',
+  help: 'Total number of failed outbox events',
+  labelNames: ['event_type', 'worker_id', 'reason'],
+});
 
 /**
  * OutboxWorker (Deterministic & Failure-Safe)
@@ -83,6 +103,13 @@ export class OutboxWorker {
         workerId: "OutboxWorker-1", 
         batchSize: pendingEvents.length 
       });
+      // Log metric for retries if applicable
+      pendingEvents.forEach(event => {
+        if (event.retries > 0) {
+          outboxEventRetriesTotal.inc({ event_type: event.eventType, worker_id: 'OutboxWorker-1' });
+          Logger.metric('outbox_event_retries_total', 1, { event_type: event.eventType, worker_id: 'OutboxWorker-1', attempt: event.retries });
+        }
+      });
 
       // Step 2: Process events
       for (const event of pendingEvents) {
@@ -96,6 +123,7 @@ export class OutboxWorker {
   private async processEvent(event: any) {
     const db = await getDb();
     const correlationId = event.correlationId;
+    const startTime = process.hrtime.bigint();
 
     try {
       // Mark as processing
@@ -130,6 +158,10 @@ export class OutboxWorker {
         eventId: event.eventId,
         status: "dispatched"
       });
+      const endTime = process.hrtime.bigint();
+      const duration = Number(endTime - startTime) / 1_000_000_000; // Convert nanoseconds to seconds
+      outboxProcessingLatency.set({ event_type: event.eventType, worker_id: 'OutboxWorker-1', status: 'dispatched' }, duration);
+      Logger.metric('outbox_processing_latency_seconds', duration, { event_type: event.eventType, worker_id: 'OutboxWorker-1', status: 'dispatched' });
 
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : "Unknown outbox dispatch error";
@@ -150,6 +182,8 @@ export class OutboxWorker {
         status,
         retryCount: event.retries + 1
       });
+      outboxEventFailuresTotal.inc({ event_type: event.eventType, worker_id: 'OutboxWorker-1', reason: errorMessage });
+      Logger.metric('outbox_event_failures_total', 1, { event_type: event.eventType, worker_id: 'OutboxWorker-1', reason: errorMessage });
       
       if (isDeadLetter) {
         await this.handleDeadLetter(event, errorMessage);

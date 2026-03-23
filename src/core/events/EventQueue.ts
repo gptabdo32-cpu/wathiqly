@@ -1,4 +1,5 @@
 import { Queue, Worker, Job } from 'bullmq';
+import { Gauge } from 'prom-client'; // For Prometheus metrics
 import { eventBus } from './EventBus';
 import IORedis from 'ioredis';
 import { Logger } from '../observability/Logger';
@@ -9,6 +10,38 @@ import { eq } from 'drizzle-orm';
 
 const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
 const connection = new IORedis(REDIS_URL, { maxRetriesPerRequest: null });
+
+// Prometheus Gauges
+const eventQueueDepth = new Gauge({
+  name: 'event_queue_depth',
+  help: 'Current depth of the event queue',
+  labelNames: ['queue_name'],
+});
+
+const eventProcessingLatency = new Gauge({
+  name: 'event_processing_latency_seconds',
+  help: 'Latency of event processing in seconds',
+  labelNames: ['event_type', 'worker_id', 'status'],
+});
+
+const eventJobRetriesTotal = new Gauge({
+  name: 'event_job_retries_total',
+  help: 'Total number of retries for event jobs',
+  labelNames: ['event_type', 'worker_id'],
+});
+
+const eventJobFailuresTotal = new Gauge({
+  name: 'event_job_failures_total',
+  help: 'Total number of failed event jobs',
+  labelNames: ['event_type', 'worker_id', 'reason'],
+});
+
+// Monitor queue depth periodically
+setInterval(async () => {
+  const count = await eventQueue.count();
+  eventQueueDepth.set({ queue_name: 'event-queue' }, count);
+  Logger.metric('event_queue_depth', count, { queue_name: 'event-queue' });
+}, 30000); // Every 30 seconds
 
 /**
  * Event Payload Schema (Rule 12, 18)
@@ -52,6 +85,7 @@ export const eventQueue = new Queue('event-queue', {
 export const eventWorker = new Worker('event-queue', async (job: Job<EventPayload>) => {
   const { event, payload, correlationId, idempotencyKey } = job.data;
   
+  const startTime = process.hrtime.bigint();
   Logger.info(`[EventWorker] Processing event: ${event}`, { 
     correlationId,
     jobId: job.id,
@@ -60,6 +94,10 @@ export const eventWorker = new Worker('event-queue', async (job: Job<EventPayloa
     retryCount: job.attemptsMade,
     workerId: "EventWorker-1"
   });
+  if (job.attemptsMade > 0) {
+    eventJobRetriesTotal.inc({ event_type: event, worker_id: 'EventWorker-1' });
+    Logger.metric('event_job_retries_total', 1, { event_type: event, worker_id: 'EventWorker-1', attempt: job.attemptsMade });
+  }
   
   // Rule 12: Strict input validation
   const validated = EventPayloadSchema.parse(job.data);
@@ -81,6 +119,11 @@ export const eventWorker = new Worker('event-queue', async (job: Job<EventPayloa
       })
       .where(eq(outboxEvents.idempotencyKey, validated.idempotencyKey));
 
+    const endTime = process.hrtime.bigint();
+    const duration = Number(endTime - startTime) / 1_000_000_000; // Convert nanoseconds to seconds
+    eventProcessingLatency.set({ event_type: event, worker_id: 'EventWorker-1', status: 'completed' }, duration);
+    Logger.metric('event_processing_latency_seconds', duration, { event_type: event, worker_id: 'EventWorker-1', status: 'completed' });
+
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     Logger.error(`[EventWorker] CRITICAL: Handler failed for ${event}`, error, { 
@@ -89,6 +132,8 @@ export const eventWorker = new Worker('event-queue', async (job: Job<EventPayloa
       retryCount: job.attemptsMade,
       workerId: "EventWorker-1"
     });
+    eventJobFailuresTotal.inc({ event_type: event, worker_id: 'EventWorker-1', reason: errorMessage });
+    Logger.metric('event_job_failures_total', 1, { event_type: event, worker_id: 'EventWorker-1', reason: errorMessage });
     
     // Update outbox with error and retry count
     const db = await getDb();

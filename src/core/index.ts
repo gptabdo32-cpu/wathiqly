@@ -17,6 +17,7 @@ import multer from "multer";
 import { storagePut } from "../storage";
 import { nanoid } from "nanoid";
 import { Logger } from "./observability/Logger";
+import { startMetricsServer } from "./observability/metricsServer";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -49,6 +50,10 @@ async function startServer() {
   sagaRecoveryEngine.start();
 
   Logger.info("Background Workers (Outbox + Saga Recovery) started successfully.");
+
+  // Start Prometheus metrics server
+  startMetricsServer();
+  Logger.info("Prometheus metrics server started.");
 
   const app = express();
   const server = createServer(app);
