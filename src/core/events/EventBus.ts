@@ -58,15 +58,16 @@ export class EventBus {
   /**
    * تنفيذ المعالجات المسجلة لحدث معين.
    */
-  public async executeHandlers(event: string, data: any): Promise<void> {
+  public async executeHandlers(event: string, data: { correlationId: string; [key: string]: any }): Promise<void> {
     const handlers = this.handlers.get(event) || [];
     if (handlers.length === 0) {
-      Logger.warn(`[EventBus] No handlers found for event: ${event}`);
+      Logger.warn(`[EventBus] No handlers found for event: ${event}`, { correlationId: data.correlationId });
       return;
     }
 
     Logger.info(`[EventBus] Executing ${handlers.length} handlers for event: ${event}`, { 
-      correlationId: data.correlationId 
+      correlationId: data.correlationId,
+      eventType: event
     });
 
     await Promise.all(handlers.map(handler => handler(data)));
