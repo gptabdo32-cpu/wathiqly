@@ -64,7 +64,7 @@ export class Logger {
       message: error.message, 
       stack: error.stack,
       name: error.name
-    } : { error };
+    } : (error ? { error } : {});
     
     console.error(`[ERROR] ${metadata.timestamp} - ${prefix}${message}`, JSON.stringify({ 
       ...metadata, 
