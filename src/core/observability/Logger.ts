@@ -29,4 +29,12 @@ export class Logger {
   static audit(action: string, actorId: string | number, status: "SUCCESS" | "FAILURE", context: { correlationId: string; [key: string]: any }) {
     console.log(`[AUDIT] ${new Date().toISOString()} - Action: ${action} | Actor: ${actorId} | Status: ${status} | CID: ${context.correlationId}`, JSON.stringify(context));
   }
+
+  /**
+   * Metrics Logging
+   * Records custom metrics for monitoring and analysis.
+   */
+  static metric(name: string, value: number, tags: { [key: string]: string | number } = {}) {
+    console.log(`[METRIC] ${new Date().toISOString()} - Name: ${name} | Value: ${value} | Tags: ${JSON.stringify(tags)}`);
+  }
 }
