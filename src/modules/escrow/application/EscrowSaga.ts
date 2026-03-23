@@ -48,7 +48,7 @@ export class EscrowSaga {
       description: input.description,
     });
 
-    const escrowId = await this.escrowRepo.create(escrow);
+    const escrowId = await this.escrowRepo.create(escrow, correlationId);
     const sagaId = `escrow_saga_${escrowId}`;
 
     await AtomicSagaExecutor.execute({

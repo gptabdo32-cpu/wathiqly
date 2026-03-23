@@ -11,7 +11,7 @@ export interface TransactionContext {
 }
 
 export class TransactionManager {
-  static async run<T>(callback: (context: TransactionContext) => Promise<T>): Promise<T> {
+  static async run<T>(callback: (context: TransactionContext) => Promise<T>, correlationId?: string): Promise<T> {
     const db = await getDb();
     if (!db) {
       throw new DatabaseError("Database connection not available for transaction");
@@ -19,7 +19,7 @@ export class TransactionManager {
 
     try {
       return await db.transaction(async (tx) => {
-        const context: TransactionContext = { tx };
+        const context: TransactionContext = { tx, correlationId };
         try {
           const result = await callback(context);
           return result;
@@ -35,7 +35,7 @@ export class TransactionManager {
       const err = error as { code?: string; message: string };
       if (err.code) throw error;
       
-      Logger.error("[TransactionManager] Transaction execution failed", error, { correlationId: "unknown" }); // correlationId might not be available at this top-level catch
+      Logger.error("[TransactionManager] Transaction execution failed", error, { correlationId }); // correlationId might not be available at this top-level catch
       throw new TransactionError("Transaction execution failed", error instanceof Error ? error : new Error(String(error)));
     }
   }

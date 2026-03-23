@@ -59,9 +59,9 @@ export class AtomicSagaExecutor {
           correlationId,
           async () => {
             // Improvement 8: Enforce Outbox + DB transaction atomicity
-            return await TransactionManager.run(async (context) => {
+           return await TransactionManager.run(async (context) => {
               return await operation(context.tx);
-            });
+            }, correlationId);
           },
           30000 // 30 second TTL
         );

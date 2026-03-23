@@ -13,7 +13,7 @@ import { Logger } from "../../../core/observability/Logger";
  * MISSION: Ensure reliable event persistence and domain state updates.
  */
 export class DrizzleEscrowRepository implements IEscrowRepository {
-  async create(escrow: Escrow, tx?: DbTransaction): Promise<number> {
+  async create(escrow: Escrow, correlationId: string, tx?: DbTransaction): Promise<number> {
     const persistence = EscrowMapper.toPersistence(escrow);
     
     const operation = async (dbTx: DbTransaction) => {
@@ -30,7 +30,7 @@ export class DrizzleEscrowRepository implements IEscrowRepository {
     };
 
     if (tx) return operation(tx);
-    return await TransactionManager.run(operation);
+    return await TransactionManager.run(operation, correlationId);
   }
 
   async getById(id: number, tx?: DbTransaction): Promise<Escrow | null> {

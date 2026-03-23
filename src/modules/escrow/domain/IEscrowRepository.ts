@@ -13,7 +13,7 @@ export interface OutboxEventInput {
 }
 
 export interface IEscrowRepository {
-  create(escrow: Escrow, tx?: unknown): Promise<number>;
+  create(escrow: Escrow, correlationId: string, tx?: unknown): Promise<number>;
 
   getById(id: number, tx?: unknown): Promise<Escrow | null>;
   
